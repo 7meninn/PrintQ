@@ -1,15 +1,16 @@
 import { Router } from "express";
-import { upload } from "../upload";
+import { uploadMultiple } from "../upload";
 import {
   createOrder,
   getUserOrders,
   getShopOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  prepareOrder
 } from "../controllers/orders.controller";
 
 const router = Router();
 
-router.post("/create", upload.single("file"), createOrder);
+router.post("/prepare", uploadMultiple, prepareOrder);
 router.get("/user/:userId", getUserOrders);
 router.get("/shop/:shopId", getShopOrders);
 router.put("/:id/status", updateOrderStatus);

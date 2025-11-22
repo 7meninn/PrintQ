@@ -19,12 +19,26 @@ export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").references(() => users.id),
   shop_id: integer("shop_id").references(() => shops.id),
-  file_url: text("file_url"),
-  pages: integer("pages"),
-  copies: integer("copies"),
-  color: boolean("color"),
-  amount: integer("amount"),
-  payment_status: varchar("payment_status", { length: 20 }).default("PAID"),
+
+  color_pages: integer("color_pages").default(0),
+  bw_pages: integer("bw_pages").default(0),
+  copies: integer("copies").default(1),
+  amount: integer("amount").notNull(),
+
   status: varchar("status", { length: 20 }).default("QUEUED"),
+
   created_at: timestamp("created_at").defaultNow()
 });
+
+export const order_files = pgTable("order_files", {
+  id: serial("id").primaryKey(),
+  order_id: integer("order_id").references(() => orders.id).notNull(),
+
+  file_url: text("file_url").notNull(),
+  pages: integer("pages").notNull(),
+  file_type: varchar("file_type", { length: 20 }),
+  color: boolean("color").default(false),
+
+  created_at: timestamp("created_at").defaultNow()
+});
+
