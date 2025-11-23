@@ -1,17 +1,17 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Login from "../pages/Login";
-import Signup from "../pages/Signup";
+import HomePage from "../pages/HomePage";
 import Upload from "../pages/Upload";
-import Orders from "../pages/Orders";
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
-      <Routes>hgmgm
-        <Route path="/" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+      <Routes>
+        {/* 🏠 Home / Login Page */}
+        <Route path="/" element={<HomePage />} />
+
+        {/* 📤 Upload & Preview Page */}
+        {/* Note: This page checks for auth internally and redirects to '/' if not logged in */}
         <Route path="/upload" element={<Upload />} />
-        <Route path="/orders" element={<Orders />} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,114 +1,86 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
-import { users, shops } from "../db/schema";
+import { users } from "../db/schema";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
-export const userLogin = async (req: Request, res: Response) => {
+const SECRET_KEY = process.env.JWT_SECRET || "supersecretkey";
+const ALLOWED_DOMAIN = "@cuchd.in";
+
+// Helper to validate domain
+const isValidDomain = (email: string) => {
+  return email.toLowerCase().endsWith(ALLOWED_DOMAIN);
+};
+
+export const signup = async (req: Request, res: Response) => {
   try {
-    const { phone } = req.body;
+    const { name, email, password } = req.body;
 
-    const found = await db
-      .select()
-      .from(users)
-      .where(eq(users.phone, phone));
-
-    if (found.length === 0) {
-      return res.status(400).json({ error: "User not found" });
+    // 1. Enforce Domain Restriction
+    if (!isValidDomain(email)) {
+      return res.status(400).json({ 
+        error: `Access restricted. Only emails ending in ${ALLOWED_DOMAIN} are allowed.` 
+      });
     }
 
-    res.json({ success: true, user: found[0] });
-
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-
-
-export const shopLogin = async (req: Request, res: Response) => {
-  try {
-    const { username, password } = req.body;
-
-    const found = await db
-      .select()
-      .from(shops)
-      .where(eq(shops.username, username));
-
-    if (found.length === 0)
-      return res.status(400).json({ error: "Shop not found" });
-
-    if (found[0].password !== password)
-      return res.status(400).json({ error: "Incorrect password" });
-
-    res.json({ success: true, shop: found[0] });
-
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-
-export const createShop = async (req: Request, res: Response) => {
-  try {
-    const { name, username, password } = req.body;
-
-    const existing = await db
-      .select()
-      .from(shops)
-      .where(eq(shops.username, username));
-
+    // 2. Check existing user
+    const existing = await db.select().from(users).where(eq(users.email, email));
     if (existing.length > 0) {
-      return res.status(400).json({ error: "Username already exists" });
+      return res.status(400).json({ error: "Email already registered" });
     }
 
-    const inserted = await db
-      .insert(shops)
-      .values({
-        name,
-        username,
-        password
-      })
-      .returning();
+    // 3. Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    res.json({
-      success: true,
-      shop: inserted[0]
-    });
-
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-
-export const createUser = async (req: Request, res: Response) => {
-  try {
-    const phone = String(req.body.phone);
-    const name = req.body.name ?? null;
-
-    const existing = await db
-      .select()
-      .from(users)
-      .where(eq(users.phone, phone));
-
-    if (existing.length > 0) {
-      return res.status(400).json({ error: "User already exists" });
-    }
-
-    const inserted = await db
+    // 4. Insert user
+    const [newUser] = await db
       .insert(users)
-      .values({
-        phone,
-        name
-      })
-      .returning();
+      .values({ name, email, password: hashedPassword })
+      .returning({ id: users.id, name: users.name, email: users.email });
 
-    res.json({
-      success: true,
-      user: inserted[0]
+    // 5. Generate Token
+    const token = jwt.sign({ id: newUser.id, email: newUser.email }, SECRET_KEY, {
+      expiresIn: "7d" // Token expires in 7 days
     });
 
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(201).json({ user: newUser, token });
+  } catch (err) {
+    console.error("Signup Error:", err);
+    res.status(500).json({ error: "Signup failed" });
+  }
+};
+
+export const login = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    // 1. Enforce Domain Restriction (Optional but good for fast failure)
+    if (!isValidDomain(email)) {
+      return res.status(400).json({ 
+        error: `Invalid domain. Please use your ${ALLOWED_DOMAIN} email.` 
+      });
+    }
+
+    // 2. Find User
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    if (!user) return res.status(400).json({ error: "Invalid credentials" });
+
+    // 3. Check Password
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(400).json({ error: "Invalid credentials" });
+
+    // 4. Generate Token
+    const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, {
+      expiresIn: "7d"
+    });
+
+    res.json({ 
+      user: { id: user.id, name: user.name, email: user.email }, 
+      token 
+    });
+  } catch (err) {
+    console.error("Login Error:", err);
+    res.status(500).json({ error: "Login failed" });
   }
 };

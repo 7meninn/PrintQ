@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
 import { orders, order_files } from "../db/schema";
-import { eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import fs from "fs";
 import { exec } from "child_process";
@@ -11,204 +10,166 @@ interface MulterFile {
   path: string;
   originalname: string;
   filename: string;
+  mimetype: string;
 }
 
+interface FileConfig {
+  color: boolean;
+  copies: number;
+}
+
+// Helper: Convert DOCX to PDF using LibreOffice (Docker)
 function convertDocxToPdf(inputPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const absoluteInput = path.resolve(inputPath); // full path
-    const outDir = path.dirname(absoluteInput);    // same folder
-    
-    // ✅ FIX: LibreOffice REPLACES the extension, it does not append it.
-    // Input:  myfile.docx
-    // Output: myfile.pdf (NOT myfile.docx.pdf)
+    const absoluteInput = path.resolve(inputPath);
+    const outDir = path.dirname(absoluteInput);
+    // LibreOffice replaces extension with .pdf
     const outputPath = absoluteInput.replace(path.extname(absoluteInput), ".pdf");
 
     const cmd = `soffice --headless --convert-to pdf --outdir "${outDir}" "${absoluteInput}"`;
 
     exec(cmd, (error) => {
       if (error) return reject(error);
-
-      // Extra safety check: ensure the file actually exists before returning
       if (!fs.existsSync(outputPath)) {
         return reject(new Error(`LibreOffice failed to generate PDF at: ${outputPath}`));
       }
-
       resolve(outputPath);
     });
   });
 }
 
+// 🟢 API: Prepare Order (Preview)
+// Receives: Files + JSON Config (copies/color for each file)
 export const prepareOrder = async (req: Request, res: Response) => {
   try {
     const files = req.files as unknown as MulterFile[];
+    
+    // Parse the config array sent from frontend (FormData)
+    const configStr = req.body.config; 
+    const configs: FileConfig[] = configStr ? JSON.parse(configStr) : [];
 
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "No files uploaded" });
     }
 
-    const results: any[] = [];
+    const processedFiles = [];
+    let summary = {
+      total_bw_pages: 0,
+      total_color_pages: 0,
+      bw_cost: 0,
+      color_cost: 0,
+      total_amount: 0
+    };
 
-    for (let file of files) {
+    const BW_PRICE = 3;
+    const COLOR_PRICE = 15;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileConfig = configs[i] || { color: false, copies: 1 }; // Default fallback
+
       const filePath = file.path;
       const ext = file.originalname.split(".").pop()?.toLowerCase();
-      let pages = 1;
+      let detectedPages = 1;
 
       try {
-        // PDF
+        // 1. Count Pages
         if (ext === "pdf") {
           const buffer = fs.readFileSync(filePath);
           const pdfDoc = await PDFDocument.load(buffer);
-          pages = pdfDoc.getPageCount();
-        }
-
-        // DOCX
-        else if (ext === "doc" || ext === "docx") {
+          detectedPages = pdfDoc.getPageCount();
+        } 
+        else if (ext === "docx" || ext === "doc") {
           const pdfPath = await convertDocxToPdf(filePath);
-
           const pdfBuffer = fs.readFileSync(pdfPath);
           const pdfDoc = await PDFDocument.load(pdfBuffer);
-
-          pages = pdfDoc.getPageCount();
-
-          // ✅ Clean up the temporary PDF created by LibreOffice
-          fs.unlinkSync(pdfPath); 
+          detectedPages = pdfDoc.getPageCount();
+          fs.unlinkSync(pdfPath); // Cleanup temp PDF
         }
-
-        // Images
-        else if (["jpg", "jpeg", "png", "gif"].includes(ext!)) {
-          pages = 1;
-        }
-
+        // Images default to 1 page
       } catch (err) {
-        console.error("Counting error:", err);
-        pages = 1;
+        console.error(`Error processing ${file.originalname}:`, err);
+        detectedPages = 1; // Fallback
       }
 
-      results.push({
-        file_url: "/" + file.path.replace(/\\/g, "/"),
-        pages,
-        type: ext,
+      // 2. Calculate Totals for this file
+      const calculatedPages = detectedPages * fileConfig.copies;
+      const cost = calculatedPages * (fileConfig.color ? COLOR_PRICE : BW_PRICE);
+
+      // 3. Update Summary
+      if (fileConfig.color) {
+        summary.total_color_pages += calculatedPages;
+        summary.color_cost += cost;
+      } else {
+        summary.total_bw_pages += calculatedPages;
+        summary.bw_cost += cost;
+      }
+
+      processedFiles.push({
+        original_name: file.originalname,
+        file_type: ext || "unknown",
+        detected_pages: detectedPages,
+        calculated_pages: calculatedPages,
+        cost: cost,
+        color: fileConfig.color,
+        file_url: `/uploads/${file.filename}` // Store this to return to frontend
       });
     }
 
-    const total_pages = results.reduce((sum, f) => sum + f.pages, 0);
+    summary.total_amount = summary.bw_cost + summary.color_cost;
 
+    // Return the exact structure the frontend expects
     return res.json({
-      files: results,
-      total_pages,
+      files: processedFiles,
+      summary
     });
+
   } catch (err) {
     console.error("prepareOrder error:", err);
-    res.status(500).json({ error: "Failed to prepare order" });
+    res.status(500).json({ error: "Failed to calculate preview" });
   }
 };
 
+// 🟢 API: Create Order (Finalize)
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    const {
-      user_id,
-      shop_id,
-      copies,
-      files
-    } = req.body;
+    const { user_id, shop_id, total_amount, files } = req.body;
 
     if (!files || files.length === 0) {
-      return res.status(400).json({ error: "Files data required" });
+      return res.status(400).json({ error: "Order data required" });
     }
 
-    // Handle stringified JSON from mobile/form-data
-    const fileArray = typeof files === "string" ? JSON.parse(files) : files;
-
-    let color_pages = 0;
-    let bw_pages = 0;
-
-    // Calculate pages breakdown
-    fileArray.forEach((f: any) => {
-      const pageCount = Number(f.pages) || 1;
-      if (f.color) color_pages += pageCount;
-      else bw_pages += pageCount;
-    });
-
-    const price_bw = 3;
-    const price_color = 15;
-
-    const amount =
-      (bw_pages * price_bw + color_pages * price_color) * Number(copies);
-
-    // 1️⃣ Insert into ORDERS TABLE
-    const [order] = await db
+    // 1. Create Order Record
+    const [newOrder] = await db
       .insert(orders)
       .values({
         user_id: Number(user_id),
         shop_id: Number(shop_id),
-        copies: Number(copies),
-        color_pages,
-        bw_pages,
-        amount,
+        total_amount: String(total_amount), // Drizzle decimal is string in JS
         status: "QUEUED",
       } as any)
       .returning();
 
-    const orderId = order.id;
-
-    // 2️⃣ Insert EACH FILE into order_files table
-    for (const f of fileArray) {
+    // 2. Insert File Records
+    // 'files' here is the array returned from the preview step, now confirmed by user
+    for (const f of files) {
       await db.insert(order_files).values({
-        order_id: orderId,
+        order_id: newOrder.id,
         file_url: f.file_url,
-        pages: f.pages,
-        file_type: f.type,
+        file_type: f.file_type,
+        pages: f.detected_pages,
+        copies: f.calculated_pages / f.detected_pages, // Deriving copies back
         color: f.color,
+        cost: String(f.cost),
       } as any);
     }
 
-    return res.json({
-      success: true,
-      order_id: orderId,
-      amount,
-      color_pages,
-      bw_pages,
-      copies,
-    });
+    res.json({ success: true, order_id: newOrder.id });
+
   } catch (err: any) {
     console.error("Create Order Error:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-export const getUserOrders = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.userId);
-    const data = await db.select().from(orders).where(eq(orders.user_id, id));
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-export const getShopOrders = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.shopId);
-    const data = await db.select().from(orders).where(eq(orders.shop_id, id));
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-export const updateOrderStatus = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const { status } = req.body;
-
-    const updated = await db
-      .update(orders)
-      .set({ status })
-      .where(eq(orders.id, id))
-      .returning();
-
-    res.json({ success: true, order: updated[0] });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-};
+// ... (Other getters like getUserOrders can remain the same)
