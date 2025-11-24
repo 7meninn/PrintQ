@@ -5,10 +5,10 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
+// Use a strong secret in production (e.g., from .env)
 const SECRET_KEY = process.env.JWT_SECRET || "supersecretkey";
 const ALLOWED_DOMAIN = "@cuchd.in";
 
-// Helper to validate domain
 const isValidDomain = (email: string) => {
   return email.toLowerCase().endsWith(ALLOWED_DOMAIN);
 };
@@ -17,37 +17,38 @@ export const signup = async (req: Request, res: Response) => {
   try {
     const { name, email, password } = req.body;
 
-    // 1. Enforce Domain Restriction
+    // 1. Strict Domain Check
     if (!isValidDomain(email)) {
-      return res.status(400).json({ 
-        error: `Access restricted. Only emails ending in ${ALLOWED_DOMAIN} are allowed.` 
+      return res.status(403).json({ 
+        error: `Access denied. You must use a ${ALLOWED_DOMAIN} email.` 
       });
     }
 
-    // 2. Check existing user
+    // 2. Check if user exists
     const existing = await db.select().from(users).where(eq(users.email, email));
     if (existing.length > 0) {
-      return res.status(400).json({ error: "Email already registered" });
+      return res.status(409).json({ error: "User already exists" });
     }
 
-    // 3. Hash password
+    // 3. Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 4. Insert user
+    // 4. Insert into Database
     const [newUser] = await db
       .insert(users)
       .values({ name, email, password: hashedPassword })
       .returning({ id: users.id, name: users.name, email: users.email });
 
-    // 5. Generate Token
+    // 5. Generate JWT
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, SECRET_KEY, {
-      expiresIn: "7d" // Token expires in 7 days
+      expiresIn: "7d" // User stays logged in for 7 days
     });
 
     res.status(201).json({ user: newUser, token });
+
   } catch (err) {
     console.error("Signup Error:", err);
-    res.status(500).json({ error: "Signup failed" });
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -55,22 +56,19 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Enforce Domain Restriction (Optional but good for fast failure)
-    if (!isValidDomain(email)) {
-      return res.status(400).json({ 
-        error: `Invalid domain. Please use your ${ALLOWED_DOMAIN} email.` 
-      });
+    // 1. Find User
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // 2. Find User
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    if (!user) return res.status(400).json({ error: "Invalid credentials" });
-
-    // 3. Check Password
+    // 2. Compare Password
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ error: "Invalid credentials" });
+    if (!match) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
-    // 4. Generate Token
+    // 3. Generate JWT
     const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, {
       expiresIn: "7d"
     });
@@ -79,6 +77,7 @@ export const login = async (req: Request, res: Response) => {
       user: { id: user.id, name: user.name, email: user.email }, 
       token 
     });
+
   } catch (err) {
     console.error("Login Error:", err);
     res.status(500).json({ error: "Login failed" });

@@ -1,11 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-// 🔹 User Type: Matches your backend response
 interface User {
   id: number;
   name: string;
   email: string;
-  token: string; // JWT Token is essential for secure requests
+  token: string;
 }
 
 interface AuthContextType {
@@ -21,33 +20,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 🔹 Check Local Storage on Mount (Auto-Login)
+  // Check for existing session on app load
   useEffect(() => {
-    const storedUser = localStorage.getItem("printq_user");
-    if (storedUser) {
+    const storedData = localStorage.getItem("printq_user");
+    if (storedData) {
       try {
-        const parsedUser = JSON.parse(storedUser);
-        // Optional: You could verify if the token is expired here
+        const parsedUser = JSON.parse(storedData);
+        // (Optional) You could verify token validity with backend here
         setUser(parsedUser);
       } catch (error) {
-        console.error("Failed to parse user data", error);
         localStorage.removeItem("printq_user");
       }
     }
     setIsLoading(false);
   }, []);
 
-  // 🔹 Login Action: Saves User + Token
   const login = (userData: User) => {
     setUser(userData);
     localStorage.setItem("printq_user", JSON.stringify(userData));
   };
 
-  // 🔹 Logout Action: Clears Storage
   const logout = () => {
     setUser(null);
     localStorage.removeItem("printq_user");
-    window.location.href = "/"; 
+    window.location.href = "/"; // Hard refresh to clear any state
   };
 
   return (

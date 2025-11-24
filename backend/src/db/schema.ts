@@ -5,16 +5,18 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  password: text("password").notNull(), // Hashed
+  password: text("password").notNull(),
   created_at: timestamp("created_at").defaultNow(),
 });
 
-// 🔹 SHOPS TABLE
+// 🔹 SHOPS TABLE (Updated)
 export const shops = pgTable("shops", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   location: text("location"),
-  is_active: boolean("is_active").default(true),
+  // Removed is_active
+  has_bw: boolean("has_bw").default(true),      // Can print B/W?
+  has_color: boolean("has_color").default(false) // Can print Color?
 });
 
 // 🔹 ORDERS TABLE
@@ -22,12 +24,12 @@ export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").references(() => users.id),
   shop_id: integer("shop_id").references(() => shops.id),
-  status: text("status").default("QUEUED"), // QUEUED, PRINTING, COMPLETED
+  status: text("status").default("QUEUED"),
   total_amount: decimal("total_amount").notNull(),
   created_at: timestamp("created_at").defaultNow(),
 });
 
-// 🔹 ORDER FILES (Individual files in an order)
+// 🔹 ORDER FILES
 export const order_files = pgTable("order_files", {
   id: serial("id").primaryKey(),
   order_id: integer("order_id").references(() => orders.id),
