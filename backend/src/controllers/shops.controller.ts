@@ -5,8 +5,7 @@ import { eq, sql, and, or, inArray } from "drizzle-orm";
 
 export const getShops = async (req: Request, res: Response) => {
   try {
-    // 1. Fetch only "Active" Shops (Must support at least one print type)
-    // This ensures shops that turn off both capabilities disappear from the frontend immediately.
+    // 1. Fetch Active Shops (Must support at least one print type)
     const activeShops = await db
       .select({
         id: shops.id,
@@ -16,14 +15,14 @@ export const getShops = async (req: Request, res: Response) => {
         has_color: shops.has_color,
       })
       .from(shops)
+      // This 'or()' clause failed before because has_bw/has_color were undefined in schema.ts
       .where(or(eq(shops.has_bw, true), eq(shops.has_color, true)));
 
     if (activeShops.length === 0) {
       return res.json([]);
     }
 
-    // 2. Get Real-Time Queue Counts for these shops
-    // OPTIMIZATION: Instead of N queries, we do 1 query grouped by shop_id.
+    // 2. Get Real-Time Queue Counts
     const shopIds = activeShops.map((s) => s.id);
     
     const queueCounts = await db
@@ -35,17 +34,17 @@ export const getShops = async (req: Request, res: Response) => {
       .where(
         and(
           inArray(orders.shop_id, shopIds),
-          inArray(orders.status, ["QUEUED", "PRINTING"]) // Only count unfinished work
+          inArray(orders.status, ["QUEUED", "PRINTING"])
         )
       )
       .groupBy(orders.shop_id);
 
-    // 3. Merge Counts into Shop Data
+    // 3. Merge Data
     const result = activeShops.map((shop) => {
       const queueData = queueCounts.find((q) => q.shop_id === shop.id);
       return {
         ...shop,
-        queue: queueData ? queueData.count : 0, // Default to 0 if no orders
+        queue: queueData ? queueData.count : 0,
       };
     });
 

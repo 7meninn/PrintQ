@@ -1,6 +1,5 @@
 import { pgTable, serial, text, integer, boolean, timestamp, decimal } from "drizzle-orm/pg-core";
 
-// 🔹 USERS TABLE
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -9,17 +8,14 @@ export const users = pgTable("users", {
   created_at: timestamp("created_at").defaultNow(),
 });
 
-// 🔹 SHOPS TABLE (Updated)
 export const shops = pgTable("shops", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   location: text("location"),
-  // Removed is_active
-  has_bw: boolean("has_bw").default(true),      // Can print B/W?
-  has_color: boolean("has_color").default(false) // Can print Color?
+  has_bw: boolean("has_bw").default(true),
+  has_color: boolean("has_color").default(false)
 });
 
-// 🔹 ORDERS TABLE
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").references(() => users.id),
@@ -29,7 +25,6 @@ export const orders = pgTable("orders", {
   created_at: timestamp("created_at").defaultNow(),
 });
 
-// 🔹 ORDER FILES
 export const order_files = pgTable("order_files", {
   id: serial("id").primaryKey(),
   order_id: integer("order_id").references(() => orders.id),
