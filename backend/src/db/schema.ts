@@ -12,6 +12,7 @@ export const shops = pgTable("shops", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   location: text("location"),
+  password: text("password").default("123456"),
   has_bw: boolean("has_bw").default(true),
   has_color: boolean("has_color").default(false)
 });

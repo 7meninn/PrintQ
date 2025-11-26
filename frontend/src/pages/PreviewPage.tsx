@@ -7,7 +7,6 @@ import {
   Palette, Loader2, Info, User as UserIcon, LogOut
 } from "lucide-react";
 
-// ✅ FIX: Added shop_id and shop_name to the interface
 interface PreviewData {
   files: {
     original_name: string;
@@ -25,8 +24,8 @@ interface PreviewData {
     color_cost: number;
     total_amount: number;
   };
-  shop_id: number;   // Added
-  shop_name: string; // Added
+  shop_id: number;
+  shop_name: string;
 }
 
 export default function PreviewPage() {
@@ -36,11 +35,12 @@ export default function PreviewPage() {
   const { resetOrder } = useOrder();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get data passed via Router State
   const previewData = location.state as PreviewData;
 
   useEffect(() => {
-    if (!previewData) navigate("/upload");
+    if (!previewData) {
+      navigate("/upload");
+    }
   }, [previewData, navigate]);
 
   if (!previewData) return null;
@@ -55,6 +55,7 @@ export default function PreviewPage() {
         files: previewData.files 
       };
 
+      // 💸 Simulating Payment Processing...
       const res = await fetch("http://localhost:3000/orders/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -63,15 +64,26 @@ export default function PreviewPage() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(`Order Placed Successfully! Order ID: ${data.order_id}`);
+        
+        // ✅ SUCCESS: Clear Context & Show Success Page
         resetOrder(); 
-        navigate("/upload");
+        navigate("/success", { 
+          state: { 
+            order_id: data.order_id,
+            total_amount: previewData.summary.total_amount,
+            shop_name: previewData.shop_name,
+            file_count: previewData.files.length
+          } 
+        });
+
       } else {
-        throw new Error("Failed to create order");
+        throw new Error("Payment/Order creation failed");
       }
     } catch (error) {
       console.error(error);
-      alert("Something went wrong.");
+      // ❌ FAILURE: Alert & Redirect to Upload
+      alert("Payment Failed! Redirecting to upload page...");
+      navigate("/upload");
     } finally {
       setIsSubmitting(false);
     }
@@ -91,6 +103,7 @@ export default function PreviewPage() {
             <p className="text-xs text-gray-500 font-medium">Review & Payment</p>
           </div>
         </div>
+        
         <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
             <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm border border-gray-200">
@@ -113,7 +126,7 @@ export default function PreviewPage() {
                     <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><Store size={24} /></div>
                     <div><p className="text-xs text-blue-600 uppercase font-bold tracking-wide">Printing At</p><h3 className="font-bold text-gray-900 text-lg">{previewData.shop_name}</h3></div>
                 </div>
-                <div className="text-right"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 text-blue-700 text-xs font-bold"><Info size={12} /> Pay at Shop</span></div>
+                <div className="text-right"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 text-blue-700 text-xs font-bold"><Info size={12} /> Pay Online</span></div>
             </div>
 
             <section className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">

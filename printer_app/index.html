@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PrintQ Station</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f3f4f6; margin: 0; padding: 20px; color: #1f2937; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2563eb; margin-bottom: 20px; }
+        
+        #login-screen { display: block; }
+        #dashboard-screen { display: none; }
+        
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        button:hover { background: #1d4ed8; }
+        button.stop { background: #dc2626; }
+        button.stop:hover { background: #b91c1c; }
+
+        #status-bar { margin-bottom: 15px; font-weight: bold; padding: 10px; background: #e5e7eb; border-radius: 6px; text-align: center; font-size: 14px; }
+        #logs { height: 250px; overflow-y: auto; background: #111827; color: #10b981; padding: 10px; font-family: monospace; border-radius: 6px; font-size: 12px; }
+        .log-entry { margin: 4px 0; border-bottom: 1px solid #1f2937; padding-bottom: 2px; }
+        .error { color: #ef4444; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🖨️ PrintQ Station</h1>
+
+        <!-- Login Screen -->
+        <div id="login-screen">
+            <p style="text-align: center; color: #6b7280;">Enter Station Credentials</p>
+            <input type="number" id="shopId" placeholder="Station ID (e.g. 1)" />
+            <input type="password" id="password" placeholder="Password" />
+            <button id="loginBtn">Connect Printer</button>
+            <p id="login-msg" style="color: red; text-align: center; margin-top: 10px; font-size: 14px;"></p>
+        </div>
+
+        <!-- Dashboard Screen -->
+        <div id="dashboard-screen">
+            <div id="status-bar">Connecting...</div>
+            <div id="logs"></div>
+            <button class="stop" id="stopBtn">Stop Service</button>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
