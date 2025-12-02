@@ -36,6 +36,13 @@
       "when": 1764131352730,
       "tag": "0004_perfect_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1764569668463,
+      "tag": "0005_busy_maximus",
+      "breakpoints": true
     }
   ]
 }

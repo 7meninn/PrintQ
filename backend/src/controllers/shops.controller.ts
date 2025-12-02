@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
 import { shops, orders } from "../db/schema";
-import { eq, sql, and, or, inArray } from "drizzle-orm";
+import { eq, sql, and, or, inArray, gt } from "drizzle-orm";
 
 export const getShops = async (req: Request, res: Response) => {
   try {
-    // 1. Fetch Active Shops (Must support at least one print type)
+    const thirtySecondsAgo = new Date(Date.now() - 15 * 1000);
+
     const activeShops = await db
       .select({
         id: shops.id,
@@ -15,14 +16,19 @@ export const getShops = async (req: Request, res: Response) => {
         has_color: shops.has_color,
       })
       .from(shops)
-      // This 'or()' clause failed before because has_bw/has_color were undefined in schema.ts
-      .where(or(eq(shops.has_bw, true), eq(shops.has_color, true)));
+      .where(
+        and(
+          // Must support at least one print type
+          or(eq(shops.has_bw, true), eq(shops.has_color, true)),
+          // ✅ MUST be online (heartbeat within last 30s)
+          gt(shops.last_heartbeat, thirtySecondsAgo)
+        )
+      );
 
     if (activeShops.length === 0) {
       return res.json([]);
     }
 
-    // 2. Get Real-Time Queue Counts
     const shopIds = activeShops.map((s) => s.id);
     
     const queueCounts = await db
@@ -39,7 +45,6 @@ export const getShops = async (req: Request, res: Response) => {
       )
       .groupBy(orders.shop_id);
 
-    // 3. Merge Data
     const result = activeShops.map((shop) => {
       const queueData = queueCounts.find((q) => q.shop_id === shop.id);
       return {

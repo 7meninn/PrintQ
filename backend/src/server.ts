@@ -7,8 +7,7 @@ import multer from "multer";
 import { signup, login } from "./controllers/auth.controller";
 import { getShops } from "./controllers/shops.controller"; // For Users (List shops)
 import { prepareOrder, createOrder } from "./controllers/orders.controller";
-import { shopLogin, getPendingJobs, completeJob } from "./controllers/shop_client.controller"; // For Printer App
-
+import { shopLogin, getPendingJobs, completeJob, shopHeartbeat } from "./controllers/shop_client.controller";
 // Cron
 import { startCleanupJob } from "./cron/cleanup";
 
@@ -40,6 +39,7 @@ app.post("/orders/create", createOrder);
 
 // 3. Shop/Printer App API (New Endpoints)
 app.post("/shop/login", shopLogin);       // Shop logs in
+app.post("/shop/heartbeat", shopHeartbeat);
 app.get("/shop/orders", getPendingJobs);  // Shop fetches queue
 app.post("/shop/complete", completeJob);  // Shop marks done
 

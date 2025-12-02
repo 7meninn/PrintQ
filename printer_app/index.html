@@ -5,22 +5,49 @@
     <meta charset="UTF-8">
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f3f4f6; margin: 0; padding: 20px; color: #1f2937; }
-        .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #2563eb; margin-bottom: 20px; }
+        .container { max-width: 550px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2563eb; margin-bottom: 20px; font-size: 24px; margin-top: 0;}
         
-        #login-screen { display: block; }
-        #dashboard-screen { display: none; }
+        /* Screens */
+        .screen { display: none; }
+        .active { display: block; }
         
-        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        /* Inputs */
+        label { display: block; margin-top: 12px; font-weight: bold; font-size: 12px; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px; }
+        input, select { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        
+        /* ✅ FIX: Replaced 'ring' with 'box-shadow' */
+        input:focus, select:focus { 
+            border-color: #2563eb; 
+            outline: none; 
+            box-shadow: 0 0 0 3px #bfdbfe; /* This creates the ring effect */
+        }
+        
+        /* Buttons */
+        button { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 15px; font-size: 14px; transition: background 0.2s; }
         button:hover { background: #1d4ed8; }
-        button.stop { background: #dc2626; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        
+        button.stop { background: #dc2626; margin-top: 10px; }
         button.stop:hover { background: #b91c1c; }
 
-        #status-bar { margin-bottom: 15px; font-weight: bold; padding: 10px; background: #e5e7eb; border-radius: 6px; text-align: center; font-size: 14px; }
-        #logs { height: 250px; overflow-y: auto; background: #111827; color: #10b981; padding: 10px; font-family: monospace; border-radius: 6px; font-size: 12px; }
-        .log-entry { margin: 4px 0; border-bottom: 1px solid #1f2937; padding-bottom: 2px; }
-        .error { color: #ef4444; }
+        /* Dashboard Header */
+        .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; padding-bottom: 15px; }
+        .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .status-online { background: #d1fae5; color: #065f46; }
+        .status-offline { background: #fee2e2; color: #991b1b; }
+
+        /* Logs */
+        #status-text { font-weight: 600; color: #4b5563; font-size: 14px; margin-bottom: 5px; }
+        #logs { height: 250px; overflow-y: auto; background: #1f2937; color: #34d399; padding: 12px; font-family: 'Consolas', monospace; border-radius: 8px; font-size: 12px; line-height: 1.5; }
+        .log-entry { margin: 4px 0; border-bottom: 1px solid #374151; padding-bottom: 2px; }
+        .error { color: #f87171; }
+
+        /* Settings Box */
+        #settings-panel { background: #eff6ff; padding: 20px; border-radius: 8px; border: 1px solid #bfdbfe; margin-bottom: 20px; }
+        .checkbox-group { display: flex; align-items: center; margin-top: 15px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #dbeafe; }
+        .checkbox-group input { width: auto; margin-right: 10px; margin-top: 0; margin-bottom: 0;}
+        .checkbox-group label { margin: 0; text-transform: none; color: #1e40af; font-size: 14px;}
     </style>
 </head>
 <body>
@@ -28,18 +55,45 @@
     <div class="container">
         <h1>🖨️ PrintQ Station</h1>
 
-        <!-- Login Screen -->
-        <div id="login-screen">
-            <p style="text-align: center; color: #6b7280;">Enter Station Credentials</p>
-            <input type="number" id="shopId" placeholder="Station ID (e.g. 1)" />
-            <input type="password" id="password" placeholder="Password" />
-            <button id="loginBtn">Connect Printer</button>
-            <p id="login-msg" style="color: red; text-align: center; margin-top: 10px; font-size: 14px;"></p>
+        <!-- LOGIN SCREEN -->
+        <div id="login-screen" class="screen active">
+            
+            <div id="settings-panel">
+                <p style="margin: 0 0 10px 0; font-weight: bold; color: #1e40af; font-size: 16px;">Configuration</p>
+                
+                <label>B/W Printer Device</label>
+                <select id="bw-printer"><option value="">Loading printers...</option></select>
+
+                <label>Color Printer Device</label>
+                <select id="color-printer"><option value="">Loading printers...</option></select>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="mock-mode">
+                    <label for="mock-mode">Enable Mock Mode (Simulate Printing)</label>
+                </div>
+            </div>
+
+            <label>Station ID</label>
+            <input type="number" id="shopId" placeholder="e.g. 1" />
+            
+            <label>Password</label>
+            <input type="password" id="password" placeholder="••••••" />
+            
+            <button id="loginBtn">Connect & Start Service</button>
+            <p id="login-msg" style="color: #dc2626; text-align: center; margin-top: 12px; font-size: 13px; font-weight: 500;"></p>
         </div>
 
-        <!-- Dashboard Screen -->
-        <div id="dashboard-screen">
-            <div id="status-bar">Connecting...</div>
+        <!-- DASHBOARD SCREEN -->
+        <div id="dashboard-screen" class="screen">
+            <div class="dash-header">
+                <div>
+                    <div style="font-size: 18px; font-weight: bold;" id="shop-name-display">Station Name</div>
+                    <div style="font-size: 12px; color: #6b7280;">ID: <span id="shop-id-display">--</span></div>
+                </div>
+                <div id="connection-badge" class="status-badge status-offline">OFFLINE</div>
+            </div>
+
+            <div id="status-text">Initializing...</div>
             <div id="logs"></div>
             <button class="stop" id="stopBtn">Stop Service</button>
         </div>

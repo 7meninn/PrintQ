@@ -13,8 +13,9 @@ export const shops = pgTable("shops", {
   name: text("name").notNull(),
   location: text("location"),
   password: text("password").default("123456"),
-  has_bw: boolean("has_bw").default(true),
-  has_color: boolean("has_color").default(false)
+  has_bw: boolean("has_bw").default(false),
+  has_color: boolean("has_color").default(false),
+  last_heartbeat: timestamp("last_heartbeat")
 });
 
 export const orders = pgTable("orders", {

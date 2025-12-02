@@ -1,15 +1,17 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 
-// Types
 interface FileItem {
   file: File;
   color: boolean;
   copies: number;
 }
 
+// Data structure returned by backend
 interface PreviewData {
   files: any[];
   summary: any;
+  shop_id?: number;
+  shop_name?: string;
 }
 
 interface OrderContextType {
@@ -36,14 +38,12 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <OrderContext.Provider 
-      value={{ 
-        files, setFiles, 
-        selectedShopId, setSelectedShopId, 
-        previewData, setPreviewData,
-        resetOrder 
-      }}
-    >
+    <OrderContext.Provider value={{ 
+      files, setFiles, 
+      selectedShopId, setSelectedShopId, 
+      previewData, setPreviewData, 
+      resetOrder 
+    }}>
       {children}
     </OrderContext.Provider>
   );
@@ -51,8 +51,6 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
 
 export const useOrder = () => {
   const context = useContext(OrderContext);
-  if (context === undefined) {
-    throw new Error("useOrder must be used within an OrderProvider");
-  }
+  if (context === undefined) throw new Error("useOrder must be used within an OrderProvider");
   return context;
 };

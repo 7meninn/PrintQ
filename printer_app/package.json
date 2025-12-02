@@ -23,8 +23,8 @@
       "**/*",
       "!dist/*"
     ],
-    "extraResources": [
-      "node_modules/pdf-to-printer/dist/SumatraPDF.exe"
+    "asarUnpack": [
+      "**/node_modules/pdf-to-printer/**"
     ]
   },
   "author": "PrintQ",

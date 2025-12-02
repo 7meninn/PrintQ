@@ -1,24 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext"; 
-import { useOrder } from "../context/OrderContext"; // ✅ Use Context
+import { useOrder } from "../context/OrderContext"; 
 import { 
-  UploadCloud, 
-  FileText, 
-  X, 
-  Minus, 
-  Plus, 
-  Store, 
-  Palette,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  AlertCircle,
-  RefreshCw,
-  Printer,
-  LogOut,
-  User as UserIcon,
-  ChevronRight
+  UploadCloud, FileText, X, Minus, Plus, Store, Palette, 
+  ChevronDown, ChevronUp, Loader2, AlertCircle, RefreshCw, 
+  Printer, LogOut, User as UserIcon, ChevronRight
 } from "lucide-react";
 
 interface Shop {
@@ -34,7 +21,8 @@ export default function UploadPage() {
   const { user, isLoading: isAuthLoading, logout } = useAuth();
   const { 
     files, setFiles, 
-    selectedShopId, setSelectedShopId 
+    selectedShopId, setSelectedShopId, 
+    setPreviewData 
   } = useOrder();
 
   // Redirect if not logged in
@@ -44,7 +32,7 @@ export default function UploadPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Local UI State (No need to persist these) ---
+  // --- Local UI State ---
   const [shops, setShops] = useState<Shop[]>([]);
   const [isLoadingShops, setIsLoadingShops] = useState(true);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -52,6 +40,7 @@ export default function UploadPage() {
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
 
   // 🔹 1. Fetch Shops (Polling)
+  // Note: I removed the auto-select logic from here because the useEffect below handles it faster/better now.
   useEffect(() => {
     let isMounted = true;
     const fetchShops = async (silent = false) => {
@@ -62,13 +51,6 @@ export default function UploadPage() {
             const data: Shop[] = await res.json();
             if (isMounted) {
                 setShops(data);
-                
-                // Auto-selection Logic (Only if nothing selected yet)
-                setSelectedShopId((prevId) => {
-                    if (prevId === null && data.length > 0) return data[0].id;
-                    const exists = data.find(s => s.id === prevId);
-                    return exists ? prevId : null;
-                });
             }
         }
       } catch (e) {
@@ -81,37 +63,45 @@ export default function UploadPage() {
     fetchShops();
     const intervalId = setInterval(() => fetchShops(true), 10000);
     return () => clearInterval(intervalId);
-  }, [setSelectedShopId]); // Added dependency
+  }, []); 
 
-  // 🔹 2. Filter Shops based on File Requirements
-  const doesOrderNeedColor = files.some(f => f.color);
+  // 🔹 2. SMART FILTER LOGIC
+  const needsColor = files.some(f => f.color);
+  const needsBW = files.some(f => !f.color);
   
   const availableShops = shops.filter(shop => {
-    if (doesOrderNeedColor && !shop.has_color) return false;
-    if (!doesOrderNeedColor && !shop.has_bw) return false;
+    if (needsColor && !shop.has_color) return false;
+    if (needsBW && !shop.has_bw) return false;
     return true;
   });
 
-  // Auto-deselect if current shop becomes invalid
+  // 🔹 3. INSTANT AUTO-SELECTION & CORRECTION
+  // This runs immediately whenever the available shops change (due to file toggle or API update)
   useEffect(() => {
-    if (selectedShopId) {
-      const shop = shops.find(s => s.id === selectedShopId);
-      if (shop) {
-        if (doesOrderNeedColor && !shop.has_color) {
-          setSelectedShopId(null);
-        }
+    // If we have shops available
+    if (availableShops.length > 0) {
+      // Check if current selection is valid
+      const isSelectionValid = selectedShopId && availableShops.some(s => s.id === selectedShopId);
+      
+      // If no shop selected OR current selection became invalid -> Pick the first one instantly
+      if (!isSelectionValid) {
+        setSelectedShopId(availableShops[0].id);
+      }
+    } else {
+      // No shops available -> Clear selection
+      if (selectedShopId !== null) {
+        setSelectedShopId(null);
       }
     }
-  }, [doesOrderNeedColor, shops, selectedShopId, setSelectedShopId]);
+  }, [availableShops, selectedShopId, setSelectedShopId]);
 
 
-  // --- File Handlers (Now updating Context) ---
+  // --- File Handlers ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) processFiles(Array.from(e.target.files));
   };
 
   const processFiles = (newFiles: File[]) => {
-    // Use functional update to append to existing context files
     setFiles(prev => [...prev, ...newFiles.map(file => ({ file, color: false, copies: 1 }))]);
   };
 
@@ -136,7 +126,6 @@ export default function UploadPage() {
     });
   };
 
-  // --- Drag & Drop ---
   const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const onDragLeave = () => setIsDragging(false);
   const onDrop = (e: React.DragEvent) => {
@@ -145,7 +134,7 @@ export default function UploadPage() {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFiles(Array.from(e.dataTransfer.files));
   };
 
-  // --- Submit ---
+  // --- Submit Logic ---
   const handleProceedToPreview = async () => {
     if (files.length === 0 || !selectedShopId) return;
     setIsPreviewLoading(true);
@@ -154,6 +143,7 @@ export default function UploadPage() {
     files.forEach(f => formData.append('files', f.file));
     const configArray = files.map(f => ({ color: f.color, copies: f.copies }));
     formData.append('config', JSON.stringify(configArray));
+    formData.append('shop_id', String(selectedShopId));
 
     try {
         const res = await fetch("http://localhost:3000/orders/preview", {
@@ -166,11 +156,16 @@ export default function UploadPage() {
         const data = await res.json();
         const shop = shops.find(s => s.id === selectedShopId);
 
-        // ✅ Navigate to Preview (State preserved in Context)
+        setPreviewData({ 
+            ...data, 
+            shop_id: selectedShopId, 
+            shop_name: shop?.name 
+        });
+        
         navigate("/preview", { 
             state: { 
                 ...data, 
-                shop_id: selectedShopId,
+                shop_id: selectedShopId, 
                 shop_name: shop?.name 
             } 
         });
@@ -210,7 +205,6 @@ export default function UploadPage() {
             <div className="hidden sm:block bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-blue-100">
                {files.length} Files Added
             </div>
-            {/* User Profile & Logout */}
             <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm border border-gray-200">
@@ -277,14 +271,22 @@ export default function UploadPage() {
                     )}
                 </div>
                 
+                {/* Empty State */}
                 {availableShops.length === 0 && !isLoadingShops && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center text-amber-900">
                         <AlertCircle className="mx-auto mb-2" />
                         <p className="font-bold text-sm">No Available Stations</p>
-                        <p className="text-xs mt-1 opacity-80">{doesOrderNeedColor ? "No shops support COLOR printing currently." : "All stations are currently offline."}</p>
+                        <p className="text-xs mt-1 opacity-80">
+                            {needsColor && needsBW 
+                                ? "No shop supports BOTH B/W and Color printing." 
+                                : needsColor 
+                                    ? "No shops support COLOR printing right now." 
+                                    : "No shops support B/W printing right now."}
+                        </p>
                     </div>
                 )}
 
+                {/* Dropdown */}
                 {availableShops.length > 0 && (
                     <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm transition-all hover:border-gray-300">
                         <div onClick={() => setIsShopDropdownOpen(!isShopDropdownOpen)} className="p-4 cursor-pointer flex justify-between items-center bg-white z-10 relative hover:bg-gray-50/50 transition-colors">
@@ -333,7 +335,6 @@ export default function UploadPage() {
         </div>
       </div>
 
-      {/* Sticky Footer */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="hidden sm:block"><p className="text-sm font-bold text-gray-900">{files.length} documents ready</p><p className="text-xs text-gray-500">Cost calculation on next step</p></div>
