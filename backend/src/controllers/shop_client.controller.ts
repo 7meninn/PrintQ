@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
-import { orders, order_files, shops } from "../db/schema";
+import { orders, order_files, shops, users } from "../db/schema"; 
 import { eq, and, inArray } from "drizzle-orm";
+import { sendOrderReadyEmail } from "../services/email.service";
 
-// 1. Shop Login (Updates Status immediately)
+
 export const shopLogin = async (req: Request, res: Response) => {
   const { id, password, has_bw, has_color } = req.body;
   
@@ -13,13 +14,12 @@ export const shopLogin = async (req: Request, res: Response) => {
     return res.status(401).json({ error: "Invalid Station ID or Password" });
   }
 
-  // ✅ SYNC CONFIGURATION: Update DB with what the shop actually has RIGHT NOW
   if (has_bw !== undefined || has_color !== undefined) {
     await db.update(shops)
       .set({ 
         has_bw: !!has_bw, 
         has_color: !!has_color,
-        last_heartbeat: new Date() // Also mark as Online
+        last_heartbeat: new Date()
       })
       .where(eq(shops.id, id));
   }
@@ -28,12 +28,9 @@ export const shopLogin = async (req: Request, res: Response) => {
   res.json({ success: true, shop: updatedShop });
 };
 
-// 2. Heartbeat (Keeps it Online AND Synced)
+// 2. Heartbeat
 export const shopHeartbeat = async (req: Request, res: Response) => {
   const { id, has_bw, has_color } = req.body;
-
-  // ✅ CONTINUOUS SYNC: If you unplug the color printer while app is running,
-  // the next heartbeat (10s later) will update the DB to has_color=false
   await db.update(shops)
     .set({ 
         last_heartbeat: new Date(),
@@ -41,7 +38,6 @@ export const shopHeartbeat = async (req: Request, res: Response) => {
         has_color: !!has_color
     })
     .where(eq(shops.id, id));
-
   res.json({ success: true });
 };
 
@@ -75,6 +71,38 @@ export const getPendingJobs = async (req: Request, res: Response) => {
 // 4. Mark Job Complete
 export const completeJob = async (req: Request, res: Response) => {
   const { order_id } = req.body;
-  await db.update(orders).set({ status: "COMPLETED" }).where(eq(orders.id, order_id));
+  
+  // Update Order Status
+  await db
+    .update(orders)
+    .set({ status: "COMPLETED" })
+    .where(eq(orders.id, order_id));
+
+  // Send Email 📧
+  const order = await db.query.orders.findFirst({ 
+      where: eq(orders.id, order_id)
+  });
+  
+  if (order) {
+      // ✅ Now 'users' is defined, so this query works
+      const user = await db.query.users.findFirst({ where: eq(users.id, order.user_id) });
+      const shop = await db.query.shops.findFirst({ where: eq(shops.id, order.shop_id) });
+      
+      if (user && shop) {
+          sendOrderReadyEmail(user.email, order.id, shop.name);
+      }
+  }
+  
   res.json({ success: true });
+};
+
+// 5. Mark Job Failed
+export const failJob = async (req: Request, res: Response) => {
+    const { order_id, reason } = req.body;
+    await db
+      .update(orders)
+      .set({ status: "FAILED" })
+      .where(eq(orders.id, order_id));
+    console.log(`Order #${order_id} marked FAILED: ${reason}`);
+    res.json({ success: true });
 };

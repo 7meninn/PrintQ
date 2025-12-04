@@ -12,7 +12,7 @@ const DATA_PATH = app.getPath('userData');
 const TEMP_DIR = path.join(DATA_PATH, 'temp_prints');
 const CONFIG_FILE = path.join(DATA_PATH, 'printer_config.json');
 const MAX_PRINTER_QUEUE = 3; 
-const POLLING_INTERVAL_MS = 5000; // 5 seconds
+const POLLING_INTERVAL_MS = 5000; 
 
 // Default Config
 let appConfig = {
@@ -33,33 +33,37 @@ let pollingInterval;
 let currentShopId = null;
 let isProcessing = false; 
 let isOnline = false;
+let isPaused = false;
 
 // 🔹 HEARTBEAT
 async function sendHeartbeat() {
   if (!currentShopId) return;
-  
-  // ✅ FIXED: Respect user selection strictly, even in Mock Mode.
-  // If dropdown is empty (""), capability is FALSE.
+
   const hasBW = appConfig.printerBW !== "";
   const hasColor = appConfig.printerColor !== "";
-  
+
+  if (isPaused) {
+    hasBW = false;
+    hasColor = false;
+  }
+
   try {
     const payload = {
-        id: currentShopId,
-        has_bw: hasBW, 
-        has_color: hasColor 
+      id: currentShopId,
+      has_bw: hasBW,
+      has_color: hasColor,
     };
 
     await axios.post(`${API_URL}/shop/heartbeat`, payload);
 
     if (!isOnline) {
-        isOnline = true;
-        if(mainWindow) mainWindow.webContents.send('connection-status', true);
+      isOnline = true;
+      if (mainWindow) mainWindow.webContents.send('connection-status', true);
     }
-  } catch(e) {
+  } catch (e) {
     if (isOnline) {
-        isOnline = false;
-        if(mainWindow) mainWindow.webContents.send('connection-status', false);
+      isOnline = false;
+      if (mainWindow) mainWindow.webContents.send('connection-status', false);
     }
   }
 }
@@ -67,9 +71,11 @@ async function sendHeartbeat() {
 // 🔹 EVENTS FROM UI
 ipcMain.on('start-service', (event, shopId) => {
   currentShopId = shopId;
+  isPaused = false;
   console.log(`Service started for Shop ID: ${shopId}`);
   
   checkOrders(); 
+  
   pollingInterval = setInterval(() => {
       checkOrders();
       sendHeartbeat(); 
@@ -77,6 +83,21 @@ ipcMain.on('start-service', (event, shopId) => {
   
   sendHeartbeat();
 });
+
+ipcMain.on('pause-service', () => {
+    isPaused = true;
+    console.log("Service Paused");
+});
+
+ipcMain.on('resume-service', () => {
+    isPaused = false;
+    console.log("Service Resumed");
+    
+    sendHeartbeat(); 
+    
+    checkOrders();
+});
+
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -101,25 +122,41 @@ function getWindowsPrinterQueue(printerName) {
 }
 
 async function getTargetPrinter(isColor) {
-  return isColor ? appConfig.printerColor : appConfig.printerBW;
+  if (isColor) return appConfig.printerColor;
+  return appConfig.printerBW;
 }
 
 // 🔹 PRINTING LOGIC
 async function processOrder(order) {
   mainWindow.webContents.send('log', `Processing Order #${order.order_id}...`);
 
+  let orderFailed = false;
+  let failReason = "";
+
+  for (const file of order.files) {
+     const printerName = await getTargetPrinter(file.color);
+     const configType = file.color ? "COLOR" : "B/W";
+
+     if (!printerName) {
+         orderFailed = true;
+         failReason = `Missing ${configType} printer for file: ${file.filename}`;
+         break; 
+     }
+  }
+
+  if (orderFailed) {
+      console.error(failReason);
+      mainWindow.webContents.send('error', `❌ Order #${order.order_id} FAILED: ${failReason}`);
+      try {
+          await axios.post(`${API_URL}/shop/fail`, { order_id: order.order_id, reason: failReason });
+      } catch(e) {}
+      return; 
+  }
+
   for (const file of order.files) {
     try {
       const printerName = await getTargetPrinter(file.color);
-      const configType = file.color ? "COLOR" : "B/W";
 
-      // Skip if no printer configured for this file type
-      if (!printerName) {
-         mainWindow.webContents.send('error', `Skipping ${file.filename}: No ${configType} printer assigned.`);
-         continue;
-      }
-
-      // Queue Watchdog (Skip in Mock Mode)
       if (!appConfig.mockMode) {
         let queueSize = await getWindowsPrinterQueue(printerName);
         while (queueSize >= MAX_PRINTER_QUEUE) {
@@ -129,7 +166,6 @@ async function processOrder(order) {
         }
       }
 
-      // Download
       mainWindow.webContents.send('status', `Downloading ${file.filename}...`);
       const dl = new DownloaderHelper(file.url, TEMP_DIR, { override: true });
       await new Promise((resolve, reject) => {
@@ -139,23 +175,14 @@ async function processOrder(order) {
       });
       const localPath = path.join(TEMP_DIR, file.filename);
 
-      // Print Action
       if (appConfig.mockMode) {
-        const printDuration = 5000; // 5 seconds per file for quicker testing
-
-        mainWindow.webContents.send('log', `[MOCK] 🖨️ Routing: ${configType} Job`);
-        mainWindow.webContents.send('log', `[MOCK] Device: "${printerName}"`);
-        mainWindow.webContents.send('log', `[MOCK] Simulating print...`);
-        
+        const printDuration = 5000; 
+        mainWindow.webContents.send('log', `[MOCK] 🖨️ Job: ${file.color ? "COLOR" : "B/W"} -> "${printerName}"`);
         await new Promise(r => setTimeout(r, printDuration));
         mainWindow.webContents.send('log', `[MOCK] ✅ Finished ${file.filename}`);
-
       } else {
         mainWindow.webContents.send('status', `Printing ${file.filename}...`);
-        await ptp.print(localPath, {
-          copies: file.copies,
-          printer: printerName
-        });
+        await ptp.print(localPath, { copies: file.copies, printer: printerName });
         mainWindow.webContents.send('log', `✅ Sent to printer: ${file.filename}`);
       }
 
@@ -185,9 +212,17 @@ async function checkOrders() {
     const res = await axios.get(`${API_URL}/shop/orders?shop_id=${currentShopId}`);
     const orders = res.data;
 
+    if(mainWindow) mainWindow.webContents.send('queue-update', orders.length);
+
+    if (isPaused) {
+        isProcessing = false;
+        return;
+    }
+
     if (orders.length > 0) {
       mainWindow.webContents.send('status', `Found ${orders.length} new orders`);
       for (const order of orders) {
+        if (isPaused) break; 
         await processOrder(order);
       }
     } else {

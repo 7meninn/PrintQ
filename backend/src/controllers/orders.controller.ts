@@ -1,16 +1,16 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
-import { orders, order_files, shops } from "../db/schema"; // ✅ Added 'shops'
+import { orders, order_files, shops, users } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument } from "pdf-lib"; // ✅ Only library needed now
 import fs from "fs";
-import { exec } from "child_process";
-import path from "path";
+import { sendOrderPlacedEmail } from "../services/email.service";
 
 interface MulterFile {
   path: string;
   originalname: string;
   filename: string;
+  mimetype: string;
 }
 
 interface FileConfig {
@@ -18,28 +18,12 @@ interface FileConfig {
   copies: number;
 }
 
-function convertDocxToPdf(inputPath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const absoluteInput = path.resolve(inputPath);
-    const outDir = path.dirname(absoluteInput);
-    const outputPath = absoluteInput.replace(path.extname(absoluteInput), ".pdf");
-    
-    const cmd = `soffice --headless --convert-to pdf --outdir "${outDir}" "${absoluteInput}"`;
-
-    exec(cmd, (error) => {
-      if (error) return reject(error);
-      if (!fs.existsSync(outputPath)) return reject(new Error("PDF conversion failed"));
-      resolve(outputPath);
-    });
-  });
-}
-
 // 🟢 PREVIEW API
 export const prepareOrder = async (req: Request, res: Response) => {
   try {
     const files = req.files as unknown as MulterFile[];
     const configStr = req.body.config;
-    const shopId = Number(req.body.shop_id); // ✅ Get Shop ID
+    const shopId = Number(req.body.shop_id);
 
     const configs: FileConfig[] = configStr ? JSON.parse(configStr) : [];
 
@@ -51,7 +35,6 @@ export const prepareOrder = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Shop ID is required for pricing" });
     }
 
-    // ✅ Fetch Shop Capabilities
     const shop = await db.query.shops.findFirst({
         where: eq(shops.id, shopId)
     });
@@ -76,54 +59,32 @@ export const prepareOrder = async (req: Request, res: Response) => {
       const file = files[i];
       const conf = configs[i] || { color: false, copies: 1 };
       const filePath = file.path;
-      const ext = file.originalname.split(".").pop()?.toLowerCase();
       
       let detectedPages = 1;
 
       try {
-        if (ext === "pdf") {
+        // ✅ Efficient PDF Page Counting
+        if (file.mimetype === 'application/pdf') {
           const buffer = fs.readFileSync(filePath);
-          const pdfDoc = await PDFDocument.load(buffer);
+          // 'ignoreEncryption' allows counting pages even if PDF is password protected
+          const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
           detectedPages = pdfDoc.getPageCount();
         } 
-        else if (ext === "docx" || ext === "doc") {
-          const pdfPath = await convertDocxToPdf(filePath);
-          const pdfBuffer = fs.readFileSync(pdfPath);
-          const pdfDoc = await PDFDocument.load(pdfBuffer);
-          detectedPages = pdfDoc.getPageCount();
-          fs.unlinkSync(pdfPath); 
-        }
+        // For Images (png, jpg), detectedPages remains 1, which is correct.
       } catch (err) {
-        console.error(`Error processing ${file.originalname}:`, err);
+        console.error(`Error counting pages for ${file.originalname}:`, err);
+        // Fallback to 1 page if file is corrupted or unreadable
         detectedPages = 1; 
       }
 
       const calculatedPages = detectedPages * conf.copies;
       
-      // 💰 PRICING LOGIC
-      let pricePerSheet = BW_PRICE;
-      let isChargedAsColor = false;
-
-      if (conf.color) {
-        // User requested Color -> Always Color Price
-        pricePerSheet = COLOR_PRICE;
-        isChargedAsColor = true;
-      } else {
-        // User requested B/W -> Check Hardware
-        if (shop.has_bw) {
-            // Shop has B/W printer -> Standard B/W Price
-            pricePerSheet = BW_PRICE;
-        } else if (shop.has_color) {
-            // Shop ONLY has Color printer -> Charge Color Price
-            pricePerSheet = COLOR_PRICE;
-            isChargedAsColor = true; // It counts towards color totals financially
-        }
-      }
-
+      // 💰 Pricing Logic
+      let pricePerSheet = conf.color ? COLOR_PRICE : BW_PRICE;
+      
       const cost = calculatedPages * pricePerSheet;
 
-      // Update Totals
-      if (isChargedAsColor) {
+      if (conf.color) {
         summary.total_color_pages += calculatedPages;
         summary.color_cost += cost;
       } else {
@@ -133,7 +94,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
 
       processedFiles.push({
         original_name: file.originalname,
-        file_type: ext || "file",
+        file_type: file.mimetype.split('/')[1] || 'file', // e.g. 'pdf', 'png'
         detected_pages: detectedPages,
         calculated_pages: calculatedPages,
         cost: cost,
@@ -152,7 +113,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
   }
 };
 
-// 🟢 CREATE API
+// 🟢 CREATE API (Remains standard)
 export const createOrder = async (req: Request, res: Response) => {
   try {
     const { user_id, shop_id, total_amount, files } = req.body;
@@ -161,7 +122,6 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "No file data provided" });
     }
 
-    // 1. Create Order
     const [newOrder] = await db
       .insert(orders)
       .values({
@@ -172,7 +132,6 @@ export const createOrder = async (req: Request, res: Response) => {
       } as any)
       .returning();
 
-    // 2. Link Files
     for (const f of files) {
       await db.insert(order_files).values({
         order_id: newOrder.id,
@@ -183,6 +142,11 @@ export const createOrder = async (req: Request, res: Response) => {
         color: f.color,
         cost: String(f.cost),
       } as any);
+    }
+
+    const user = await db.query.users.findFirst({ where: eq(users.id, Number(user_id)) });
+    if (user) {
+        sendOrderPlacedEmail(user.email, newOrder.id, String(total_amount));
     }
 
     res.json({ success: true, order_id: newOrder.id });

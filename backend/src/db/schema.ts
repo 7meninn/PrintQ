@@ -27,6 +27,14 @@ export const orders = pgTable("orders", {
   created_at: timestamp("created_at").defaultNow(),
 });
 
+export const otp_verifications = pgTable("otp_verifications", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  otp: text("otp").notNull(),
+  expires_at: timestamp("expires_at").notNull(),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
 export const order_files = pgTable("order_files", {
   id: serial("id").primaryKey(),
   order_id: integer("order_id").references(() => orders.id),

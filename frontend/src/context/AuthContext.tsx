@@ -20,15 +20,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing session on app load
   useEffect(() => {
     const storedData = localStorage.getItem("printq_user");
     if (storedData) {
       try {
-        const parsedUser = JSON.parse(storedData);
-        // (Optional) You could verify token validity with backend here
-        setUser(parsedUser);
+        const parsed = JSON.parse(storedData);
+        
+        if (parsed.user && parsed.token && !parsed.email) {
+           console.warn("Detected malformed auth data. Fixing...");
+           const flatUser = { ...parsed.user, token: parsed.token };
+           setUser(flatUser);
+           localStorage.setItem("printq_user", JSON.stringify(flatUser));
+        } else {
+           // Data is correct
+           setUser(parsed);
+        }
       } catch (error) {
+        console.error("Auth data corrupted", error);
         localStorage.removeItem("printq_user");
       }
     }
@@ -43,7 +51,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => {
     setUser(null);
     localStorage.removeItem("printq_user");
-    window.location.href = "/"; // Hard refresh to clear any state
+    window.location.href = "/"; 
   };
 
   return (

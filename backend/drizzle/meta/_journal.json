@@ -43,6 +43,13 @@
       "when": 1764569668463,
       "tag": "0005_busy_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1764694630919,
+      "tag": "0006_useful_sage",
+      "breakpoints": true
     }
   ]
 }

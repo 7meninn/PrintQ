@@ -25,7 +25,6 @@ export default function UploadPage() {
     setPreviewData 
   } = useOrder();
 
-  // Redirect if not logged in
   useEffect(() => {
     if (!isAuthLoading && !user) navigate("/");
   }, [user, isAuthLoading, navigate]);
@@ -40,7 +39,6 @@ export default function UploadPage() {
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
 
   // 🔹 1. Fetch Shops (Polling)
-  // Note: I removed the auto-select logic from here because the useEffect below handles it faster/better now.
   useEffect(() => {
     let isMounted = true;
     const fetchShops = async (silent = false) => {
@@ -51,6 +49,11 @@ export default function UploadPage() {
             const data: Shop[] = await res.json();
             if (isMounted) {
                 setShops(data);
+                setSelectedShopId((prevId) => {
+                    if (prevId === null && data.length > 0) return data[0].id;
+                    const exists = data.find(s => s.id === prevId);
+                    return exists ? prevId : null;
+                });
             }
         }
       } catch (e) {
@@ -63,9 +66,9 @@ export default function UploadPage() {
     fetchShops();
     const intervalId = setInterval(() => fetchShops(true), 10000);
     return () => clearInterval(intervalId);
-  }, []); 
+  }, [setSelectedShopId]); 
 
-  // 🔹 2. SMART FILTER LOGIC
+  // 🔹 2. STRICT FILTER LOGIC
   const needsColor = files.some(f => f.color);
   const needsBW = files.some(f => !f.color);
   
@@ -75,30 +78,42 @@ export default function UploadPage() {
     return true;
   });
 
-  // 🔹 3. INSTANT AUTO-SELECTION & CORRECTION
-  // This runs immediately whenever the available shops change (due to file toggle or API update)
+  // 🔹 3. Auto-Correction
   useEffect(() => {
-    // If we have shops available
-    if (availableShops.length > 0) {
-      // Check if current selection is valid
-      const isSelectionValid = selectedShopId && availableShops.some(s => s.id === selectedShopId);
-      
-      // If no shop selected OR current selection became invalid -> Pick the first one instantly
-      if (!isSelectionValid) {
-        setSelectedShopId(availableShops[0].id);
-      }
-    } else {
-      // No shops available -> Clear selection
-      if (selectedShopId !== null) {
-        setSelectedShopId(null);
-      }
+    if (selectedShopId) {
+      const shop = shops.find(s => s.id === selectedShopId);
+      const isStillValid = availableShops.some(s => s.id === selectedShopId);
+      if (!shop || !isStillValid) setSelectedShopId(null);
     }
-  }, [availableShops, selectedShopId, setSelectedShopId]);
+  }, [needsColor, needsBW, shops, availableShops, selectedShopId, setSelectedShopId]);
 
+  // 🔒 SECURITY: File Validation Helper
+  const validateFiles = (fileList: File[]) => {
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    const validFiles: File[] = [];
+    let rejectedCount = 0;
+
+    fileList.forEach(file => {
+        if (allowedTypes.includes(file.type)) {
+            validFiles.push(file);
+        } else {
+            rejectedCount++;
+        }
+    });
+
+    if (rejectedCount > 0) {
+        alert(`⚠️ Skipped ${rejectedCount} file(s). Only PDF, PNG, and JPG are allowed.\nExecutable files (.exe, .sh) are strictly prohibited.`);
+    }
+
+    return validFiles;
+  };
 
   // --- File Handlers ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) processFiles(Array.from(e.target.files));
+    if (e.target.files && e.target.files.length > 0) {
+        const valid = validateFiles(Array.from(e.target.files));
+        processFiles(valid);
+    }
   };
 
   const processFiles = (newFiles: File[]) => {
@@ -131,10 +146,13 @@ export default function UploadPage() {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFiles(Array.from(e.dataTransfer.files));
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const valid = validateFiles(Array.from(e.dataTransfer.files));
+        processFiles(valid);
+    }
   };
 
-  // --- Submit Logic ---
+  // --- Submit ---
   const handleProceedToPreview = async () => {
     if (files.length === 0 || !selectedShopId) return;
     setIsPreviewLoading(true);
@@ -151,7 +169,10 @@ export default function UploadPage() {
             body: formData
         });
         
-        if (!res.ok) throw new Error("Preview failed");
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || "Preview failed");
+        }
         
         const data = await res.json();
         const shop = shops.find(s => s.id === selectedShopId);
@@ -170,9 +191,9 @@ export default function UploadPage() {
             } 
         });
 
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        alert("Failed to generate preview. Please try again.");
+        alert(`Error: ${e.message}`);
     } finally {
         setIsPreviewLoading(false);
     }
@@ -208,9 +229,9 @@ export default function UploadPage() {
             <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm border border-gray-200">
-                        {user?.name?.[0].toUpperCase() || <UserIcon size={16}/>}
+                        {user?.name?.[0]?.toUpperCase() || <UserIcon size={16}/>}
                     </div>
-                    <span className="hidden md:block text-sm font-medium text-gray-700 truncate max-w-[100px]">{user?.name.split(' ')[0]}</span>
+                    <span className="hidden md:block text-sm font-medium text-gray-700 truncate max-w-[100px]">{user?.name ? user.name.split(' ')[0] : "User"}</span>
                 </div>
                 <button onClick={logout} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200" title="Sign Out">
                     <LogOut size={18} />
@@ -227,10 +248,11 @@ export default function UploadPage() {
                 <section>
                     <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Upload Documents</h2>
                     <div onClick={() => fileInputRef.current?.click()} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} className={`group relative flex flex-col items-center justify-center w-full h-52 rounded-2xl border-2 border-dashed transition-all cursor-pointer overflow-hidden ${isDragging ? "border-blue-500 bg-blue-50/50 scale-[1.01]" : "border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50"}`}>
-                        <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+                        {/* 🔒 SECURE ACCEPT ATTRIBUTE */}
+                        <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
                         <div className="flex flex-col items-center space-y-4 text-center z-10">
                             <div className={`p-4 rounded-full transition-transform duration-300 group-hover:scale-110 ${isDragging ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"}`}><UploadCloud size={32} /></div>
-                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, DOCX, PNG, JPG (Max 10MB)</p></div>
+                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, PNG, JPG</p></div>
                         </div>
                     </div>
                 </section>
@@ -271,7 +293,6 @@ export default function UploadPage() {
                     )}
                 </div>
                 
-                {/* Empty State */}
                 {availableShops.length === 0 && !isLoadingShops && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center text-amber-900">
                         <AlertCircle className="mx-auto mb-2" />
@@ -286,7 +307,6 @@ export default function UploadPage() {
                     </div>
                 )}
 
-                {/* Dropdown */}
                 {availableShops.length > 0 && (
                     <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm transition-all hover:border-gray-300">
                         <div onClick={() => setIsShopDropdownOpen(!isShopDropdownOpen)} className="p-4 cursor-pointer flex justify-between items-center bg-white z-10 relative hover:bg-gray-50/50 transition-colors">
