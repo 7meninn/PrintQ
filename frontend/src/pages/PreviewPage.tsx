@@ -8,22 +8,8 @@ import {
 } from "lucide-react";
 
 interface PreviewData {
-  files: {
-    original_name: string;
-    file_type: string;
-    detected_pages: number;
-    calculated_pages: number;
-    cost: number;
-    color: boolean;
-    file_url: string;
-  }[];
-  summary: {
-    total_bw_pages: number;
-    total_color_pages: number;
-    bw_cost: number;
-    color_cost: number;
-    total_amount: number;
-  };
+  files: any[];
+  summary: any;
   shop_id: number;
   shop_name: string;
 }
@@ -38,55 +24,106 @@ export default function PreviewPage() {
   const previewData = location.state as PreviewData;
 
   useEffect(() => {
-    if (!previewData) {
-      navigate("/upload");
-    }
+    if (!previewData) navigate("/upload");
   }, [previewData, navigate]);
 
   if (!previewData) return null;
 
+  // 🔹 HANDLE PAYMENT FLOW
   const handleConfirmOrder = async () => {
     setIsSubmitting(true);
-    try {
-      const payload = {
-        user_id: user?.id,
-        shop_id: previewData.shop_id,
-        total_amount: previewData.summary.total_amount,
-        files: previewData.files 
-      };
 
-      // 💸 Simulating Payment Processing...
-      const res = await fetch("http://localhost:3000/orders/create", {
+    try {
+      // 1. Initiate: Ask Backend for Order ID
+      const initRes = await fetch("http://localhost:3000/orders/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ total_amount: previewData.summary.total_amount })
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        
-        // ✅ SUCCESS: Clear Context & Show Success Page
-        resetOrder(); 
-        navigate("/success", { 
-          state: { 
-            order_id: data.order_id,
-            total_amount: previewData.summary.total_amount,
-            shop_name: previewData.shop_name,
-            file_count: previewData.files.length
-          } 
-        });
+      if (!initRes.ok) throw new Error("Failed to initiate payment");
+      const orderData = await initRes.json();
 
-      } else {
-        throw new Error("Payment/Order creation failed");
-      }
+      // 2. Open Razorpay Checkout
+      const options = {
+        key: orderData.key_id, // Backend sends the key
+        amount: orderData.amount,
+        currency: "INR",
+        name: "PrintQ",
+        description: "Document Printing Service",
+        order_id: orderData.razorpay_order_id, // The ID we just got
+        
+        // ✅ HANDLER: Runs when payment succeeds
+        handler: async function (response: any) {
+           await finalizeOrder(response);
+        },
+        
+        prefill: {
+            name: user?.name,
+            email: user?.email,
+        },
+        theme: {
+            color: "#2563eb"
+        },
+        // Handle closure without payment
+        modal: {
+            ondismiss: function() {
+                setIsSubmitting(false);
+            }
+        }
+      };
+
+      // Open the popup
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+
     } catch (error) {
       console.error(error);
-      // ❌ FAILURE: Alert & Redirect to Upload
-      alert("Payment Failed! Redirecting to upload page...");
-      navigate("/upload");
-    } finally {
+      alert("Could not start payment. Please try again.");
       setIsSubmitting(false);
     }
+  };
+
+  // 🔹 FINALIZE: Send Signature to Backend
+  const finalizeOrder = async (paymentData: any) => {
+      try {
+        const payload = {
+            user_id: user?.id,
+            shop_id: previewData.shop_id,
+            total_amount: previewData.summary.total_amount,
+            files: previewData.files,
+            // Payment Proof
+            razorpay_order_id: paymentData.razorpay_order_id,
+            razorpay_payment_id: paymentData.razorpay_payment_id,
+            razorpay_signature: paymentData.razorpay_signature
+        };
+
+        const res = await fetch("http://localhost:3000/orders/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            resetOrder(); 
+            navigate("/success", { 
+                state: { 
+                    order_id: data.order_id,
+                    total_amount: previewData.summary.total_amount,
+                    shop_name: previewData.shop_name,
+                    file_count: previewData.files.length
+                } 
+            });
+        } else {
+            throw new Error("Verification Failed");
+        }
+      } catch (e) {
+          alert("Payment successful, but order creation failed. Contact support.");
+          navigate("/upload");
+      } finally {
+          setIsSubmitting(false);
+      }
   };
 
   return (
@@ -107,9 +144,9 @@ export default function PreviewPage() {
         <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
             <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm border border-gray-200">
-                    {user?.name?.[0].toUpperCase() || <UserIcon size={16}/>}
+                    {user?.name?.[0]?.toUpperCase() || <UserIcon size={16}/>}
                 </div>
-                <span className="hidden md:block text-sm font-medium text-gray-700 truncate max-w-[100px]">{user?.name.split(' ')[0]}</span>
+                <span className="hidden md:block text-sm font-medium text-gray-700 truncate max-w-[100px]">{user?.name?.split(' ')[0]}</span>
             </div>
             <button onClick={logout} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Sign Out">
                 <LogOut size={18} />
@@ -119,7 +156,7 @@ export default function PreviewPage() {
 
       <div className="max-w-4xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* Order Details */}
+        {/* Left Column */}
         <div className="lg:col-span-8 space-y-6">
             <div className="bg-white border border-blue-100 rounded-xl p-4 shadow-sm flex items-center justify-between bg-gradient-to-r from-blue-50 to-white">
                 <div className="flex items-center gap-3">
@@ -151,7 +188,7 @@ export default function PreviewPage() {
             </section>
         </div>
 
-        {/* Bill Summary */}
+        {/* Right Column */}
         <div className="lg:col-span-4 space-y-6">
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Current Rates</h4>
@@ -172,12 +209,11 @@ export default function PreviewPage() {
                 <div className="mt-8 pt-4 border-t border-gray-700">
                     <div className="flex justify-between items-end mb-6"><p className="text-xs text-gray-400 font-medium">Total Amount Payable</p><p className="text-3xl font-bold text-white tracking-tight">₹{previewData.summary.total_amount}</p></div>
                     <button onClick={handleConfirmOrder} disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:text-blue-400 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : <>Confirm & Pay <CheckCircle2 size={20} /></>}
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : <>Pay with Razorpay <CheckCircle2 size={20} /></>}
                     </button>
                 </div>
             </div>
         </div>
-
       </div>
     </div>
   );

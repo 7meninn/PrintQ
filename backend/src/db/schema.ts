@@ -24,6 +24,8 @@ export const orders = pgTable("orders", {
   shop_id: integer("shop_id").references(() => shops.id),
   status: text("status").default("QUEUED"),
   total_amount: decimal("total_amount").notNull(),
+  razorpay_order_id: text("razorpay_order_id"),
+  razorpay_payment_id: text("razorpay_payment_id"),
   created_at: timestamp("created_at").defaultNow(),
 });
 

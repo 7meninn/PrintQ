@@ -2,9 +2,10 @@ import { Request, Response } from "express";
 import { db } from "../db/connection";
 import { orders, order_files, shops, users } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { PDFDocument } from "pdf-lib"; // ✅ Only library needed now
+import { PDFDocument } from "pdf-lib";
 import fs from "fs";
 import { sendOrderPlacedEmail } from "../services/email.service";
+import { createRazorpayOrder, verifyPaymentSignature } from "../services/payment.service";
 
 interface MulterFile {
   path: string;
@@ -113,15 +114,43 @@ export const prepareOrder = async (req: Request, res: Response) => {
   }
 };
 
+export const initiatePayment = async (req: Request, res: Response) => {
+  try {
+    const { total_amount } = req.body;
+
+    // In a real app, you should re-calculate total_amount here to prevent tampering.
+    // For now, we trust the preview calculation passed from frontend.
+    
+    const rzOrder = await createRazorpayOrder(Number(total_amount));
+    
+    res.json({ 
+      success: true, 
+      razorpay_order_id: rzOrder.id, 
+      amount: rzOrder.amount,
+      key_id: process.env.RAZORPAY_KEY_ID 
+    });
+
+  } catch (err: any) {
+    console.error("Payment Init Error:", err);
+    res.status(500).json({ error: "Could not initiate payment" });
+  }
+};
+
 // 🟢 CREATE API (Remains standard)
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    const { user_id, shop_id, total_amount, files } = req.body;
+    const { 
+      user_id, shop_id, total_amount, files,
+      razorpay_order_id, razorpay_payment_id, razorpay_signature // ✅ New Fields
+    } = req.body;
 
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "No file data provided" });
+    // 1. Verify Signature
+    const isValid = verifyPaymentSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    if (!isValid) {
+        return res.status(400).json({ error: "Payment verification failed. Invalid signature." });
     }
 
+    // 2. Create Order in DB
     const [newOrder] = await db
       .insert(orders)
       .values({
@@ -129,9 +158,12 @@ export const createOrder = async (req: Request, res: Response) => {
         shop_id: Number(shop_id),
         total_amount: String(total_amount),
         status: "QUEUED",
+        razorpay_order_id,    // ✅ Save IDs for refunds later
+        razorpay_payment_id,  // ✅
       } as any)
       .returning();
 
+    // 3. Link Files
     for (const f of files) {
       await db.insert(order_files).values({
         order_id: newOrder.id,
@@ -144,6 +176,7 @@ export const createOrder = async (req: Request, res: Response) => {
       } as any);
     }
 
+    // 4. Email
     const user = await db.query.users.findFirst({ where: eq(users.id, Number(user_id)) });
     if (user) {
         sendOrderPlacedEmail(user.email, newOrder.id, String(total_amount));

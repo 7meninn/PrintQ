@@ -6,9 +6,8 @@ import multer from "multer";
 // Controllers
 import { login, initiateSignup, completeSignup } from "./controllers/auth.controller";
 import { getShops } from "./controllers/shops.controller";
-import { prepareOrder, createOrder } from "./controllers/orders.controller";
+import { prepareOrder, createOrder, initiatePayment } from "./controllers/orders.controller";
 import { shopLogin, getPendingJobs, completeJob, shopHeartbeat, failJob } from "./controllers/shop_client.controller";
-
 // Cron
 import { startCleanupJob } from "./cron/cleanup";
 import { startRefundJob } from "./cron/refund";
@@ -69,6 +68,7 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
 };
 
 app.post("/orders/preview", handleUpload, prepareOrder);
+app.post("/orders/initiate", initiatePayment);
 app.post("/orders/create", createOrder);
 
 // Shop API

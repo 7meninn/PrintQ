@@ -260,4 +260,3 @@ function addLog(msg, isError = false) {
 }
 
 
-// Now that we can remove libreoffice from the server for the plan of digital ocean $6 how much have we improved what are the new traffic estimates.
