@@ -163,6 +163,14 @@ export default function UploadPage() {
     formData.append('config', JSON.stringify(configArray));
     formData.append('shop_id', String(selectedShopId));
 
+    // ✅ ADDED: Send User ID so backend can create the Draft Order
+    if (user?.id) {
+        formData.append('user_id', String(user.id));
+    } else {
+        alert("User session not found. Please login again.");
+        return;
+    }
+
     try {
         const res = await fetch("http://localhost:3000/orders/preview", {
             method: "POST",
@@ -170,8 +178,8 @@ export default function UploadPage() {
         });
         
         if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || "Preview failed");
+            const error = await res.json();
+            throw new Error(error.error || "Preview failed");
         }
         
         const data = await res.json();
@@ -185,7 +193,7 @@ export default function UploadPage() {
         
         navigate("/preview", { 
             state: { 
-                ...data, 
+                ...data, // Now includes 'order_id'
                 shop_id: selectedShopId, 
                 shop_name: shop?.name 
             } 
@@ -193,7 +201,7 @@ export default function UploadPage() {
 
     } catch (e: any) {
         console.error(e);
-        alert(`Error: ${e.message}`);
+        alert(`Failed to generate preview: ${e.message}`);
     } finally {
         setIsPreviewLoading(false);
     }

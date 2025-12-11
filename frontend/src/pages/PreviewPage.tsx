@@ -12,6 +12,7 @@ interface PreviewData {
   summary: any;
   shop_id: number;
   shop_name: string;
+  order_id: number;
 }
 
 export default function PreviewPage() {
@@ -31,100 +32,153 @@ export default function PreviewPage() {
 
   // 🔹 HANDLE PAYMENT FLOW
   const handleConfirmOrder = async () => {
+
     setIsSubmitting(true);
 
     try {
-      // 1. Initiate: Ask Backend for Order ID
+
+      // 1. Initiate (Send Order ID only - Secure!)
+
       const initRes = await fetch("http://localhost:3000/orders/initiate", {
+
         method: "POST",
+
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ total_amount: previewData.summary.total_amount })
+
+        body: JSON.stringify({ order_id: previewData.order_id })
+
       });
 
-      if (!initRes.ok) throw new Error("Failed to initiate payment");
+
+
+      if (!initRes.ok) throw new Error("Payment initiation failed");
+
       const orderData = await initRes.json();
 
-      // 2. Open Razorpay Checkout
+
+
+      // 2. Open Razorpay
+
       const options = {
-        key: orderData.key_id, // Backend sends the key
+
+        key: orderData.key_id,
+
         amount: orderData.amount,
+
         currency: "INR",
+
         name: "PrintQ",
-        description: "Document Printing Service",
-        order_id: orderData.razorpay_order_id, // The ID we just got
+
+        description: `Order #${previewData.order_id}`,
+
+        order_id: orderData.razorpay_order_id,
+
         
-        // ✅ HANDLER: Runs when payment succeeds
+
         handler: async function (response: any) {
+
            await finalizeOrder(response);
+
         },
-        
-        prefill: {
-            name: user?.name,
-            email: user?.email,
-        },
-        theme: {
-            color: "#2563eb"
-        },
-        // Handle closure without payment
-        modal: {
-            ondismiss: function() {
-                setIsSubmitting(false);
-            }
-        }
+
+        prefill: { name: user?.name, email: user?.email },
+
+        theme: { color: "#2563eb" },
+
+        modal: { ondismiss: function() { setIsSubmitting(false); } }
+
       };
 
-      // Open the popup
+
+
       const rzp = new (window as any).Razorpay(options);
+
       rzp.open();
 
+
+
     } catch (error) {
+
       console.error(error);
-      alert("Could not start payment. Please try again.");
+
+      alert("Could not start payment.");
+
       setIsSubmitting(false);
+
     }
+
   };
 
   // 🔹 FINALIZE: Send Signature to Backend
   const finalizeOrder = async (paymentData: any) => {
+
       try {
+
+        // 3. Confirm (Send Signature)
+
         const payload = {
-            user_id: user?.id,
-            shop_id: previewData.shop_id,
-            total_amount: previewData.summary.total_amount,
-            files: previewData.files,
-            // Payment Proof
-            razorpay_order_id: paymentData.razorpay_order_id,
+
+            order_id: previewData.order_id,
+
             razorpay_payment_id: paymentData.razorpay_payment_id,
+
             razorpay_signature: paymentData.razorpay_signature
+
         };
 
-        const res = await fetch("http://localhost:3000/orders/create", {
+
+
+        const res = await fetch("http://localhost:3000/orders/confirm", {
+
             method: "POST",
+
             headers: { "Content-Type": "application/json" },
+
             body: JSON.stringify(payload)
+
         });
 
+
+
         if (res.ok) {
-            const data = await res.json();
+
             resetOrder(); 
+
             navigate("/success", { 
+
                 state: { 
-                    order_id: data.order_id,
+
+                    order_id: previewData.order_id,
+
                     total_amount: previewData.summary.total_amount,
+
                     shop_name: previewData.shop_name,
+
                     file_count: previewData.files.length
+
                 } 
+
             });
+
         } else {
+
             throw new Error("Verification Failed");
+
         }
+
       } catch (e) {
-          alert("Payment successful, but order creation failed. Contact support.");
-          navigate("/upload");
+
+          alert("Payment verified but order update failed. Contact support.");
+
       } finally {
+
           setIsSubmitting(false);
+
       }
+
   };
+
+
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32 animate-in fade-in slide-in-from-right-4 duration-300">

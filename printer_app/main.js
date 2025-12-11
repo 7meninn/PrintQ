@@ -38,32 +38,27 @@ let isPaused = false;
 // 🔹 HEARTBEAT
 async function sendHeartbeat() {
   if (!currentShopId) return;
-
+  
   const hasBW = appConfig.printerBW !== "";
   const hasColor = appConfig.printerColor !== "";
-
-  if (isPaused) {
-    hasBW = false;
-    hasColor = false;
-  }
-
+  
   try {
     const payload = {
-      id: currentShopId,
-      has_bw: hasBW,
-      has_color: hasColor,
+        id: currentShopId,
+        has_bw: appConfig.mockMode ? (hasBW || true) : hasBW, 
+        has_color: appConfig.mockMode ? (hasColor || true) : hasColor 
     };
 
     await axios.post(`${API_URL}/shop/heartbeat`, payload);
 
     if (!isOnline) {
-      isOnline = true;
-      if (mainWindow) mainWindow.webContents.send('connection-status', true);
+        isOnline = true;
+        if(mainWindow) mainWindow.webContents.send('connection-status', true);
     }
-  } catch (e) {
+  } catch(e) {
     if (isOnline) {
-      isOnline = false;
-      if (mainWindow) mainWindow.webContents.send('connection-status', false);
+        isOnline = false;
+        if(mainWindow) mainWindow.webContents.send('connection-status', false);
     }
   }
 }
@@ -92,9 +87,7 @@ ipcMain.on('pause-service', () => {
 ipcMain.on('resume-service', () => {
     isPaused = false;
     console.log("Service Resumed");
-    
     sendHeartbeat(); 
-    
     checkOrders();
 });
 
@@ -153,9 +146,16 @@ async function processOrder(order) {
       return; 
   }
 
+  // Execution Loop
+  let executionSuccess = true;
+
   for (const file of order.files) {
     try {
       const printerName = await getTargetPrinter(file.color);
+
+      // ✅ DECODE FILENAME: Convert "My%20File.pdf" -> "My File.pdf"
+      // This ensures Windows saves it correctly and SumatraPDF can find it.
+      const cleanFilename = decodeURIComponent(file.filename);
 
       if (!appConfig.mockMode) {
         let queueSize = await getWindowsPrinterQueue(printerName);
@@ -166,24 +166,31 @@ async function processOrder(order) {
         }
       }
 
-      mainWindow.webContents.send('status', `Downloading ${file.filename}...`);
-      const dl = new DownloaderHelper(file.url, TEMP_DIR, { override: true });
+      mainWindow.webContents.send('status', `Downloading ${cleanFilename}...`);
+      
+      const dl = new DownloaderHelper(file.url, TEMP_DIR, { 
+          override: true,
+          fileName: cleanFilename // ✅ Force correct name on disk
+      });
+      
       await new Promise((resolve, reject) => {
         dl.on('end', () => resolve());
         dl.on('error', (err) => reject(err));
         dl.start();
       });
-      const localPath = path.join(TEMP_DIR, file.filename);
 
+      const localPath = path.join(TEMP_DIR, cleanFilename);
+
+      // Print
       if (appConfig.mockMode) {
         const printDuration = 5000; 
         mainWindow.webContents.send('log', `[MOCK] 🖨️ Job: ${file.color ? "COLOR" : "B/W"} -> "${printerName}"`);
         await new Promise(r => setTimeout(r, printDuration));
-        mainWindow.webContents.send('log', `[MOCK] ✅ Finished ${file.filename}`);
+        mainWindow.webContents.send('log', `[MOCK] ✅ Finished ${cleanFilename}`);
       } else {
-        mainWindow.webContents.send('status', `Printing ${file.filename}...`);
+        mainWindow.webContents.send('status', `Printing ${cleanFilename}...`);
         await ptp.print(localPath, { copies: file.copies, printer: printerName });
-        mainWindow.webContents.send('log', `✅ Sent to printer: ${file.filename}`);
+        mainWindow.webContents.send('log', `✅ Sent to printer: ${cleanFilename}`);
       }
 
       try { fs.unlinkSync(localPath); } catch(e) {}
@@ -192,14 +199,24 @@ async function processOrder(order) {
     } catch (err) {
       console.error(err);
       mainWindow.webContents.send('error', `Failed file: ${file.filename}`);
+      executionSuccess = false;
+      failReason = `Failed to download/print: ${file.filename}`;
+      break;
     }
   }
 
-  try {
-    await axios.post(`${API_URL}/shop/complete`, { order_id: order.order_id });
-    mainWindow.webContents.send('log', `Order #${order.order_id} Finished & Closed.`);
-  } catch(e) {
-    mainWindow.webContents.send('error', `Server Update Failed for #${order.order_id}`);
+  if (executionSuccess) {
+      try {
+        await axios.post(`${API_URL}/shop/complete`, { order_id: order.order_id });
+        mainWindow.webContents.send('log', `Order #${order.order_id} Finished & Closed.`);
+      } catch(e) {
+        mainWindow.webContents.send('error', `Server Update Failed for #${order.order_id}`);
+      }
+  } else {
+      try {
+        await axios.post(`${API_URL}/shop/fail`, { order_id: order.order_id, reason: failReason });
+        mainWindow.webContents.send('error', `❌ Order #${order.order_id} FAILED & REFUNDED.`);
+      } catch(e) {}
   }
 }
 

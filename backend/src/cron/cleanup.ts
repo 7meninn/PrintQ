@@ -1,56 +1,76 @@
-import fs from "fs";
-import path from "path";
 import cron from "node-cron";
 import { db } from "../db/connection";
-import { order_files } from "../db/schema";
-import { sql } from "drizzle-orm";
+import { order_files, orders } from "../db/schema";
+import { eq, sql } from "drizzle-orm";
+import { deleteFileFromAzure, listFilesFromAzure } from "../services/storage.service";
 
-const UPLOADS_DIR = path.join(__dirname, "../../uploads");
-
-// Helper: Check if file exists in DB
-const isFileInDb = async (filename: string) => {
-  // We store URLs like "/uploads/filename.pdf", so we search for that
-  const result = await db
-    .select({ count: sql<number>`count(*)` })
+const shouldKeepFile = async (azureUrl: string) => {
+  const fileRecord = await db
+    .select({ 
+        orderId: order_files.order_id 
+    })
     .from(order_files)
-    .where(sql`${order_files.file_url} LIKE ${`%${filename}`}`); // Check if filename is in URL
+    .where(eq(order_files.file_url, azureUrl))
+    .limit(1);
 
-  return Number(result[0].count) > 0;
+  // If not in DB, it's an orphan -> Delete (Return false)
+  if (fileRecord.length === 0) return false;
+
+  const orderId = fileRecord[0].orderId;
+  
+  if (!orderId) return false; // Should not happen given schema, but safe check
+
+  // 2. Check the Order Status
+  const order = await db
+    .select({ status: orders.status })
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .limit(1);
+
+  if (order.length === 0) return false; // Order deleted? Delete file.
+
+  const status = order[0].status;
+
+  // 3. Logic: Keep only if Active
+  // Active statuses: QUEUED, PRINTING
+  // Delete if: COMPLETED, FAILED, REFUNDED
+  if (status === 'QUEUED' || status === 'PRINTING' || status === "DRAFT") {
+      return true; // Keep it
+  }
+
+  return false; // Delete it
 };
 
 export const startCleanupJob = () => {
-  // Run every night at midnight: "0 0 * * *"
-  // For testing, let's run every 1 hour: "0 * * * *"
-  cron.schedule("0 * * * *", async () => {
-    console.log("🧹 Running Cleanup Job: Checking for orphaned files...");
+  // Run every minute
+  cron.schedule("* * * * *", async () => {
+    console.log("🧹 Cloud Cleanup: Checking for deletable blobs...");
 
     try {
-      if (!fs.existsSync(UPLOADS_DIR)) return;
-
-      const files = fs.readdirSync(UPLOADS_DIR);
+      const files = await listFilesFromAzure();
       const now = Date.now();
-      const ONE_DAY = 24 * 60 * 60 * 1000; // 24 Hours
+      // const TIME_LIMIT = 24 * 60 * 60 * 1000; // 24 Hours (Production)
+      const TIME_LIMIT = 3 * 60 * 1000; // 3 Minutes (Testing)
 
       for (const file of files) {
-        const filePath = path.join(UPLOADS_DIR, file);
-        const stats = fs.statSync(filePath);
-        const fileAge = now - stats.mtimeMs;
+        if (!file.createdOn) continue;
+        
+        const fileAge = now - file.createdOn.getTime();
 
-        // 1. Only check files older than 24 hours (give users time to complete order)
-        if (fileAge > ONE_DAY) {
-          
-          // 2. Check if this file is actually attached to a paid order
-          const isLinked = await isFileInDb(file);
+        if (fileAge > TIME_LIMIT) {
+            // Check comprehensive logic
+            const keep = await shouldKeepFile(file.url);
 
-          if (!isLinked) {
-            // 3. Delete Orphan
-            console.log(`🗑️ Deleting orphaned file: ${file}`);
-            fs.unlinkSync(filePath);
-          }
+            if (!keep) {
+                console.log(`🗑️ Deleting file: ${file.name}`);
+                await deleteFileFromAzure(file.url);
+            } else {
+                // console.log(`🛡️ Keeping active file: ${file.name}`);
+            }
         }
       }
     } catch (err) {
-      console.error("Cleanup Job Failed:", err);
+      console.error("Cleanup Error:", err);
     }
   });
 };
