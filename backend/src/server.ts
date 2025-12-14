@@ -8,7 +8,7 @@ import { getShops } from "./controllers/shops.controller";
 import { prepareOrder, initiatePayment, confirmOrder } from "./controllers/orders.controller";
 import { 
   shopLogin, getPendingJobs, completeJob, shopHeartbeat, failJob,
-  createShop, deleteShop // ✅ Added Admin Controllers
+  createShop, deleteShop
 } from "./controllers/shop_client.controller";
 
 // Jobs
@@ -16,7 +16,7 @@ import { startCleanupJob } from "./cron/cleanup";
 import { startRefundJob } from "./cron/refund";
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Azure friendly port
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -40,7 +40,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
 const upload = multer({ 
   storage,
   fileFilter,
-  limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit
+  limits: { fileSize: 200 * 1024 * 1024 }
 });
 
 // 🔒 ADMIN SECURITY MIDDLEWARE
@@ -51,22 +51,13 @@ const adminAuth = (req: Request, res: Response, next: NextFunction) => {
   }
   next();
 };
-
-// --- ROUTES ---
-
-// 🛡️ Admin API (Protected)
 app.post("/admin/shops/create", adminAuth, createShop);
 app.post("/admin/shops/delete", adminAuth, deleteShop);
-
-// Auth
 app.post("/auth/login", login);
 app.post("/auth/signup/initiate", initiateSignup);
 app.post("/auth/signup/complete", completeSignup);
-
-// User Flow
 app.get("/shops", getShops);
 
-// Upload Handler Wrapper
 const handleUpload = (req: Request, res: Response, next: NextFunction) => {
   const uploadMiddleware = upload.array("files");
   uploadMiddleware(req, res, (err) => {
@@ -79,7 +70,7 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-app.post("/orders/preview", handleUpload, prepareOrder); // Creates DRAFT
+app.post("/orders/preview", handleUpload, prepareOrder);
 app.post("/orders/initiate", initiatePayment);           // Secure Init
 app.post("/orders/confirm", confirmOrder);
 

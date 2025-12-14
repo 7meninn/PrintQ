@@ -26,11 +26,15 @@ const initStorage = async () => {
 };
 initStorage();
 
-export const uploadFileToAzure = async (buffer: Buffer, originalName: string): Promise<string> => {
-  const filename = `${Date.now()}_${originalName}`;
+export const uploadFileToAzure = async (buffer: Buffer, originalName: string, forceName?: string): Promise<string> => {
+
+  const filename = forceName || `${Date.now()}_${originalName}`;
+  
   const blockBlobClient = containerClient.getBlockBlobClient(filename);
 
-  await blockBlobClient.uploadData(buffer);
+  // Overwrite if exists
+  await blockBlobClient.uploadData(buffer, { blobHTTPHeaders: { blobContentType: "application/pdf" } });
+  
   return blockBlobClient.url; 
 };
 

@@ -18,9 +18,7 @@ export const getShops = async (req: Request, res: Response) => {
       .from(shops)
       .where(
         and(
-          // Must support at least one print type
           or(eq(shops.has_bw, true), eq(shops.has_color, true)),
-          // ✅ MUST be online (heartbeat within last 30s)
           gt(shops.last_heartbeat, thirtySecondsAgo)
         )
       );

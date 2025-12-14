@@ -18,36 +18,41 @@ interface FileConfig {
   copies: number;
 }
 
-// 🟢 PREVIEW API: Calculates costs, Uploads, AND Creates Draft Order
 export const prepareOrder = async (req: Request, res: Response) => {
   try {
     const files = req.files as unknown as MulterFile[];
     const configStr = req.body.config;
     const shopId = Number(req.body.shop_id);
-    const userId = Number(req.body.user_id); // ✅ Get User ID
+    const userId = Number(req.body.user_id);
 
     const configs: FileConfig[] = configStr ? JSON.parse(configStr) : [];
 
     if (!files || files.length === 0) return res.status(400).json({ error: "No files received" });
     if (!shopId) return res.status(400).json({ error: "Shop ID required" });
-    if (!userId) return res.status(400).json({ error: "User ID required" }); // ✅ Validate User
+    if (!userId) return res.status(400).json({ error: "User ID required" });
 
     const shop = await db.query.shops.findFirst({ where: eq(shops.id, shopId) });
     if (!shop) return res.status(404).json({ error: "Selected shop not found" });
 
     const processedFiles = [];
-    // Constants
-    const COVER_PAGE_COST = 2;
-    const BW_PRICE = 3;
+    
+    // ✅ NEW PRICING CONSTANTS
+    const BW_PRICE = 2;
     const COLOR_PRICE = 15;
+    const SERVICE_CHARGE_PERCENTAGE = 0.25; // 25%
+    const MAX_SERVICE_CHARGE = 30; // Max Cap
 
     let summary = {
-      total_bw_pages: 0, total_color_pages: 0,
-      bw_cost: 0, color_cost: 0, service_charge: COVER_PAGE_COST,
-      total_amount: 0
+      total_bw_pages: 0,
+      total_color_pages: 0,
+      bw_cost: 0,
+      color_cost: 0,
+      print_cost: 0,    // Pure cost of printing
+      service_charge: 0, // The 25% fee
+      total_amount: 0   // Final payable
     };
 
-    // 1. Process Files & Upload
+    // 1. Process Files
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const conf = configs[i] || { color: false, copies: 1 };
@@ -68,14 +73,14 @@ export const prepareOrder = async (req: Request, res: Response) => {
       // Calc Cost
       const calculatedPages = detectedPages * conf.copies;
       const pricePerSheet = conf.color ? COLOR_PRICE : BW_PRICE;
-      const cost = calculatedPages * pricePerSheet;
+      const fileCost = calculatedPages * pricePerSheet;
 
       if (conf.color) {
         summary.total_color_pages += calculatedPages;
-        summary.color_cost += cost;
+        summary.color_cost += fileCost;
       } else {
         summary.total_bw_pages += calculatedPages;
-        summary.bw_cost += cost;
+        summary.bw_cost += fileCost;
       }
 
       processedFiles.push({
@@ -83,23 +88,30 @@ export const prepareOrder = async (req: Request, res: Response) => {
         file_type: file.mimetype.split('/')[1] || 'file',
         detected_pages: detectedPages,
         calculated_pages: calculatedPages,
-        cost: cost,
+        cost: fileCost,
         color: conf.color,
         file_url: azureUrl 
       });
     }
 
-    summary.total_amount = summary.bw_cost + summary.color_cost + summary.service_charge;
+    // ✅ CALCULATE FINAL TOTALS
+    summary.print_cost = summary.bw_cost + summary.color_cost;
+    
+    // 🔹 Updated Logic: Service Charge = min(25% of print_cost, 30)
+    const rawServiceCharge = summary.print_cost * SERVICE_CHARGE_PERCENTAGE;
+    summary.service_charge = Math.ceil(Math.min(rawServiceCharge, MAX_SERVICE_CHARGE));
 
-    // 2. ✅ CREATE DRAFT ORDER IN DB (This generates the ID)
+    summary.total_amount = summary.print_cost + summary.service_charge;
+
+    // 2. Create Draft Order
     const [draftOrder] = await db.insert(orders).values({
         user_id: userId,
         shop_id: shopId,
         total_amount: String(summary.total_amount),
-        status: "DRAFT", // Important!
+        status: "DRAFT",
     } as any).returning();
 
-    // 3. Link Files to Draft
+    // 3. Link Files
     for (const f of processedFiles) {
         await db.insert(order_files).values({
             order_id: draftOrder.id,
@@ -112,11 +124,10 @@ export const prepareOrder = async (req: Request, res: Response) => {
         } as any);
     }
 
-    // 4. Return Data WITH Order ID
     res.json({ 
         files: processedFiles, 
         summary,
-        order_id: draftOrder.id // ✅ This is what was missing
+        order_id: draftOrder.id 
     });
 
   } catch (err) {
@@ -125,23 +136,27 @@ export const prepareOrder = async (req: Request, res: Response) => {
   }
 };
 
-// 🟢 PAYMENT INITIATE
+// 🟢 PAYMENT INITIATE (Secure)
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
     const { order_id } = req.body; 
 
-    // Now this check makes sense because we expect a real ID
+    // Validate ID
     if (!order_id || isNaN(Number(order_id))) {
         return res.status(400).json({ error: "Invalid Order ID" });
     }
 
+    // 1. Fetch Order from DB (Source of Truth)
     const order = await db.query.orders.findFirst({
         where: eq(orders.id, Number(order_id))
     });
 
     if (!order) return res.status(404).json({ error: "Order not found" });
 
+    // 2. 🔒 SECURITY: Use DB Amount, ignore frontend amount
     const amount = Number(order.total_amount);
+    
+    // 3. Create Razorpay Order
     const rzOrder = await createRazorpayOrder(amount);
     
     await db.update(orders)
@@ -151,7 +166,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
     res.json({ 
       success: true, 
       razorpay_order_id: rzOrder.id, 
-      amount: rzOrder.amount,
+      amount: rzOrder.amount, // Returns amount in paise
       key_id: process.env.RAZORPAY_KEY_ID 
     });
 
@@ -161,7 +176,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
   }
 };
 
-// 🟢 CONFIRM ORDER (Updated to just flip status)
+// 🟢 CONFIRM ORDER
 export const confirmOrder = async (req: Request, res: Response) => {
   try {
     const { 
@@ -202,3 +217,5 @@ export const confirmOrder = async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+export const createOrder = async (req: Request, res: Response) => { res.status(410).json({error: "Deprecated"}); };

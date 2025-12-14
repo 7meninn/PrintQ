@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext"; 
 import { useOrder } from "../context/OrderContext"; 
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { 
   UploadCloud, FileText, X, Minus, Plus, Store, Palette, 
   ChevronDown, ChevronUp, Loader2, AlertCircle, RefreshCw, 
@@ -19,10 +20,10 @@ interface Shop {
 export default function UploadPage() {
   const navigate = useNavigate();
   const { user, isLoading: isAuthLoading, logout } = useAuth();
+
   const { 
     files, setFiles, 
-    selectedShopId, setSelectedShopId, 
-    setPreviewData 
+    selectedShopId, setSelectedShopId 
   } = useOrder();
 
   useEffect(() => {
@@ -30,15 +31,12 @@ export default function UploadPage() {
   }, [user, isAuthLoading, navigate]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // --- Local UI State ---
   const [shops, setShops] = useState<Shop[]>([]);
   const [isLoadingShops, setIsLoadingShops] = useState(true);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
 
-  // 🔹 1. Fetch Shops (Polling)
   useEffect(() => {
     let isMounted = true;
     const fetchShops = async (silent = false) => {
@@ -49,11 +47,6 @@ export default function UploadPage() {
             const data: Shop[] = await res.json();
             if (isMounted) {
                 setShops(data);
-                setSelectedShopId((prevId) => {
-                    if (prevId === null && data.length > 0) return data[0].id;
-                    const exists = data.find(s => s.id === prevId);
-                    return exists ? prevId : null;
-                });
             }
         }
       } catch (e) {
@@ -66,12 +59,11 @@ export default function UploadPage() {
     fetchShops();
     const intervalId = setInterval(() => fetchShops(true), 10000);
     return () => clearInterval(intervalId);
-  }, [setSelectedShopId]); 
+  }, []); 
 
-  // 🔹 2. STRICT FILTER LOGIC
   const needsColor = files.some(f => f.color);
   const needsBW = files.some(f => !f.color);
-  
+   
   const availableShops = shops.filter(shop => {
     if (needsColor && !shop.has_color) return false;
     if (needsBW && !shop.has_bw) return false;
@@ -83,37 +75,22 @@ export default function UploadPage() {
     if (selectedShopId) {
       const shop = shops.find(s => s.id === selectedShopId);
       const isStillValid = availableShops.some(s => s.id === selectedShopId);
-      if (!shop || !isStillValid) setSelectedShopId(null);
+      
+      // Select first available if current is invalid
+      if (!shop || !isStillValid) {
+        if(availableShops.length > 0) setSelectedShopId(availableShops[0].id);
+        else setSelectedShopId(null);
+      }
+    } else if (availableShops.length > 0) {
+        // Auto select first if nothing selected
+        setSelectedShopId(availableShops[0].id);
     }
   }, [needsColor, needsBW, shops, availableShops, selectedShopId, setSelectedShopId]);
 
-  // 🔒 SECURITY: File Validation Helper
-  const validateFiles = (fileList: File[]) => {
-    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-    const validFiles: File[] = [];
-    let rejectedCount = 0;
-
-    fileList.forEach(file => {
-        if (allowedTypes.includes(file.type)) {
-            validFiles.push(file);
-        } else {
-            rejectedCount++;
-        }
-    });
-
-    if (rejectedCount > 0) {
-        alert(`⚠️ Skipped ${rejectedCount} file(s). Only PDF, PNG, and JPG are allowed.\nExecutable files (.exe, .sh) are strictly prohibited.`);
-    }
-
-    return validFiles;
-  };
 
   // --- File Handlers ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-        const valid = validateFiles(Array.from(e.target.files));
-        processFiles(valid);
-    }
+    if (e.target.files && e.target.files.length > 0) processFiles(Array.from(e.target.files));
   };
 
   const processFiles = (newFiles: File[]) => {
@@ -146,64 +123,64 @@ export default function UploadPage() {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        const valid = validateFiles(Array.from(e.dataTransfer.files));
-        processFiles(valid);
-    }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFiles(Array.from(e.dataTransfer.files));
   };
+
+  const generateSeparator = async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([400, 600]);
+    const { height } = page.getSize();
+    const font = await doc.embedFont(StandardFonts.HelveticaBold);
+    const fontReg = await doc.embedFont(StandardFonts.Helvetica);
+
+    page.drawText("PrintQ", { x: 20, y: height - 50, size: 24, font, color: rgb(0, 0.4, 0.8) });
+    page.drawText("SEPARATOR SHEET", { x: 20, y: height - 80, size: 12, font: fontReg, color: rgb(0.5, 0.5, 0.5) });
+    
+    // User Name
+    const userName = user?.name || "Guest";
+    page.drawText(userName.toUpperCase(), { x: 20, y: height - 140, size: 28, font, color: rgb(0, 0, 0) });
+    
+    page.drawText(`Total Files: ${files.length}`, { x: 20, y: height - 180, size: 18, font });
+    page.drawText("Please collect all documents below this sheet.", { x: 20, y: 30, size: 10, font: fontReg, color: rgb(0.5, 0.5, 0.5) });
+
+    const pdfBytes = await doc.save();
+    const arrayBuffer = new ArrayBuffer(pdfBytes.byteLength);
+    new Uint8Array(arrayBuffer).set(pdfBytes);
+
+    return new File(
+    [arrayBuffer],
+    "000_Separator.pdf",
+    { type: "application/pdf" }
+    );
+};
 
   // --- Submit ---
   const handleProceedToPreview = async () => {
     if (files.length === 0 || !selectedShopId) return;
-    setIsPreviewLoading(true);
-
-    const formData = new FormData();
-    files.forEach(f => formData.append('files', f.file));
-    const configArray = files.map(f => ({ color: f.color, copies: f.copies }));
-    formData.append('config', JSON.stringify(configArray));
-    formData.append('shop_id', String(selectedShopId));
-
-    // ✅ ADDED: Send User ID so backend can create the Draft Order
-    if (user?.id) {
-        formData.append('user_id', String(user.id));
-    } else {
-        alert("User session not found. Please login again.");
-        return;
-    }
+    setIsProcessing(true);
 
     try {
-        const res = await fetch("http://localhost:3000/orders/preview", {
-            method: "POST",
-            body: formData
-        });
+        // 1. Generate Separator
+        const separatorFile = await generateSeparator();
+        const separatorItem = { file: separatorFile, color: false, copies: 1 };
         
-        if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error || "Preview failed");
-        }
-        
-        const data = await res.json();
+        const filesToPreview = [separatorItem, ...files];
         const shop = shops.find(s => s.id === selectedShopId);
-
-        setPreviewData({ 
-            ...data, 
-            shop_id: selectedShopId, 
-            shop_name: shop?.name 
-        });
         
+        // FIX: Changed 'rawFiles' to 'files' to match PreviewPage expectation
         navigate("/preview", { 
             state: { 
-                ...data, // Now includes 'order_id'
+                files: filesToPreview, 
                 shop_id: selectedShopId, 
                 shop_name: shop?.name 
             } 
         });
 
-    } catch (e: any) {
+    } catch (e) {
         console.error(e);
-        alert(`Failed to generate preview: ${e.message}`);
+        alert("Error preparing files.");
     } finally {
-        setIsPreviewLoading(false);
+        setIsProcessing(false);
     }
   };
 
@@ -256,11 +233,10 @@ export default function UploadPage() {
                 <section>
                     <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Upload Documents</h2>
                     <div onClick={() => fileInputRef.current?.click()} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} className={`group relative flex flex-col items-center justify-center w-full h-52 rounded-2xl border-2 border-dashed transition-all cursor-pointer overflow-hidden ${isDragging ? "border-blue-500 bg-blue-50/50 scale-[1.01]" : "border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50"}`}>
-                        {/* 🔒 SECURE ACCEPT ATTRIBUTE */}
                         <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
                         <div className="flex flex-col items-center space-y-4 text-center z-10">
                             <div className={`p-4 rounded-full transition-transform duration-300 group-hover:scale-110 ${isDragging ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"}`}><UploadCloud size={32} /></div>
-                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, PNG, JPG</p></div>
+                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, PNG, JPG (Max 10MB)</p></div>
                         </div>
                     </div>
                 </section>
@@ -365,9 +341,9 @@ export default function UploadPage() {
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="hidden sm:block"><p className="text-sm font-bold text-gray-900">{files.length} documents ready</p><p className="text-xs text-gray-500">Cost calculation on next step</p></div>
-            <button onClick={handleProceedToPreview} disabled={files.length === 0 || !selectedShopId || isPreviewLoading} className="w-full sm:w-auto bg-gray-900 hover:bg-black disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white px-8 py-3.5 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
-                {isPreviewLoading ? <Loader2 className="animate-spin" /> : <>Proceed to Preview <ChevronRight size={18} /></>}
+            <div className="hidden sm:block"><p className="text-sm font-bold text-gray-900">{files.length} documents ready</p><p className="text-xs text-gray-500">Proceed to calculate cost</p></div>
+            <button onClick={handleProceedToPreview} disabled={files.length === 0 || !selectedShopId || isProcessing} className="w-full sm:w-auto bg-gray-900 hover:bg-black disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white px-8 py-3.5 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
+                {isProcessing ? <Loader2 className="animate-spin" /> : <>Proceed to Preview <ChevronRight size={18} /></>}
             </button>
         </div>
       </div>
