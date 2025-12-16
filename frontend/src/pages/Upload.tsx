@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronUp, Loader2, AlertCircle, RefreshCw, 
   Printer, LogOut, User as UserIcon, ChevronRight
 } from "lucide-react";
+import Footer from "../components/Footer";
 
 interface Shop {
   id: number;
@@ -94,7 +95,25 @@ export default function UploadPage() {
   };
 
   const processFiles = (newFiles: File[]) => {
-    setFiles(prev => [...prev, ...newFiles.map(file => ({ file, color: false, copies: 1 }))]);
+    const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+    const validFiles: File[] = [];
+    const oversizedFiles: string[] = [];
+
+    newFiles.forEach(file => {
+        if (file.size > MAX_SIZE_BYTES) {
+            oversizedFiles.push(file.name);
+        } else {
+            validFiles.push(file);
+        }
+    });
+
+    if (oversizedFiles.length > 0) {
+        alert(`The following files exceed the 20MB limit and were skipped:\n\n- ${oversizedFiles.join('\n- ')}`);
+    }
+
+    if (validFiles.length > 0) {
+        setFiles(prev => [...prev, ...validFiles.map(file => ({ file, color: false, copies: 1 }))]);
+    }
   };
 
   const removeFile = (index: number) => {
@@ -167,7 +186,6 @@ export default function UploadPage() {
         const filesToPreview = [separatorItem, ...files];
         const shop = shops.find(s => s.id === selectedShopId);
         
-        // FIX: Changed 'rawFiles' to 'files' to match PreviewPage expectation
         navigate("/preview", { 
             state: { 
                 files: filesToPreview, 
@@ -236,7 +254,7 @@ export default function UploadPage() {
                         <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
                         <div className="flex flex-col items-center space-y-4 text-center z-10">
                             <div className={`p-4 rounded-full transition-transform duration-300 group-hover:scale-110 ${isDragging ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"}`}><UploadCloud size={32} /></div>
-                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, PNG, JPG (Max 10MB)</p></div>
+                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, PNG, JPG (Max 20MB)</p></div>
                         </div>
                     </div>
                 </section>
@@ -338,7 +356,7 @@ export default function UploadPage() {
             </div>
         </div>
       </div>
-
+      <Footer />
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="hidden sm:block"><p className="text-sm font-bold text-gray-900">{files.length} documents ready</p><p className="text-xs text-gray-500">Proceed to calculate cost</p></div>

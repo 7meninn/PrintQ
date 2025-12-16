@@ -2,7 +2,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import HomePage from "../pages/HomePage";
 import UploadPage from "../pages/Upload";
 import PreviewPage from "../pages/PreviewPage";
-import SuccessPage from "../pages/SuccessPage"; // ✅ Import
+import SuccessPage from "../pages/SuccessPage";
+import PrivacyPolicy from "../pages/PrivacyPolicy";
+import Terms from "../pages/Terms";
+import RefundPolicy from "../pages/RefundPolicy";
+import Contact from "../pages/Contact";
 
 export default function AppRouter() {
   return (
@@ -11,7 +15,11 @@ export default function AppRouter() {
         <Route path="/" element={<HomePage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/preview" element={<PreviewPage />} />
-        <Route path="/success" element={<SuccessPage />} /> {/* ✅ Add Route */}
+        <Route path="/success" element={<SuccessPage />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/refunds" element={<RefundPolicy />} />
+        <Route path="/contact" element={<Contact />} />
       </Routes>
     </BrowserRouter>
   );

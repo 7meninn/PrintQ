@@ -176,6 +176,23 @@ export const initiatePayment = async (req: Request, res: Response) => {
   }
 };
 
+export const cancelOrder = async (req: Request, res: Response) => {
+    try {
+        const { order_id } = req.body;
+        if (!order_id) return res.status(400).json({ error: "Order ID required" });
+
+        await db.update(orders)
+            .set({ status: "CANCELLED" })
+            .where(eq(orders.id, order_id));
+
+        console.log(`Order #${order_id} cancelled by user.`);
+        res.json({ success: true });
+    } catch (err: any) {
+        console.error("Cancel Order Error:", err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
 // 🟢 CONFIRM ORDER
 export const confirmOrder = async (req: Request, res: Response) => {
   try {

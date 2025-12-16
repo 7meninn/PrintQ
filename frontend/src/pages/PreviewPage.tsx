@@ -7,6 +7,7 @@ import {
   ArrowLeft, Store, FileText, Receipt, CheckCircle2, Printer, 
   Palette, Loader2, Info, User as UserIcon, LogOut, Eye, X
 } from "lucide-react";
+import Footer from "../components/Footer";
 
 interface PreviewData {
     files: LocalFileItem[];
@@ -182,7 +183,6 @@ export default function PreviewPage() {
       const backendTotal = Number(orderDraft.summary.total_amount);
       const frontendTotal = summary.total_amount;
       
-      // Allow a small margin of error for floating point diffs, but strict on logic
       if (Math.abs(backendTotal - frontendTotal) > 2) { 
           if(!confirm(`Total adjusted by server to ₹${backendTotal} (was ₹${frontendTotal}). Proceed?`)) {
               throw new Error("Cancelled by user");
@@ -211,9 +211,20 @@ export default function PreviewPage() {
         prefill: { name: user?.name, email: user?.email },
         theme: { color: "#2563eb" },
         modal: { 
-            ondismiss: function() {
+            ondismiss: async function() {
                 setIsSubmitting(false);
-                setStatusMessage("");
+                setStatusMessage("Payment Cancelled");
+                
+                // ✅ NEW: Cancel the draft order on the backend to allow cleanup
+                try {
+                    await fetch("http://localhost:3000/orders/cancel", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ order_id: orderDraft.order_id })
+                    });
+                } catch (e) {
+                    console.error("Failed to cancel order", e);
+                }
             }
         }
       };
@@ -223,7 +234,10 @@ export default function PreviewPage() {
 
     } catch (error: any) {
       console.error(error);
-      alert(`Error: ${error.message}`);
+      // Only alert if it's not a user cancellation (which is handled in ondismiss)
+      if (error.message !== "Cancelled by user") {
+          alert(`Error: ${error.message}`);
+      }
       setIsSubmitting(false);
       setStatusMessage("");
     }
@@ -398,6 +412,7 @@ export default function PreviewPage() {
         </div>
 
       </div>
+      <Footer />
 
       {/* File Viewer Modal */}
       {viewFile && (

@@ -1,15 +1,16 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import multer from "multer";
-
+import { startStationMonitorJob } from "./cron/station_monitor";
 // Controllers
 import { login, initiateSignup, completeSignup } from "./controllers/auth.controller";
 import { getShops } from "./controllers/shops.controller";
-import { prepareOrder, initiatePayment, confirmOrder } from "./controllers/orders.controller";
+import { prepareOrder, initiatePayment, confirmOrder, cancelOrder } from "./controllers/orders.controller";
 import { 
   shopLogin, getPendingJobs, completeJob, shopHeartbeat, failJob,
   createShop, deleteShop
 } from "./controllers/shop_client.controller";
+import { uploadLimiter } from "./services/ratelimiter.service"
 
 // Jobs
 import { startCleanupJob } from "./cron/cleanup";
@@ -40,7 +41,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
 const upload = multer({ 
   storage,
   fileFilter,
-  limits: { fileSize: 200 * 1024 * 1024 }
+  limits: { fileSize: 20 * 1024 * 1024 }
 });
 
 // 🔒 ADMIN SECURITY MIDDLEWARE
@@ -70,9 +71,10 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-app.post("/orders/preview", handleUpload, prepareOrder);
+app.post("/orders/preview", uploadLimiter, handleUpload, prepareOrder);
 app.post("/orders/initiate", initiatePayment);           // Secure Init
 app.post("/orders/confirm", confirmOrder);
+app.post("/orders/cancel", cancelOrder);
 
 // Shop/Printer App API
 app.post("/shop/login", shopLogin);
@@ -84,6 +86,7 @@ app.post("/shop/fail", failJob);
 // Start Background Jobs
 startCleanupJob();
 startRefundJob();
+startStationMonitorJob();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

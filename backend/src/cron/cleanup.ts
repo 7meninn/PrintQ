@@ -1,10 +1,10 @@
 import cron from "node-cron";
 import { db } from "../db/connection";
 import { order_files, orders } from "../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { deleteFileFromAzure, listFilesFromAzure } from "../services/storage.service";
 
-const shouldKeepFile = async (azureUrl: string) => {
+const shouldKeepFile = async (azureUrl: string, fileAgeMs: number) => {
   const fileRecord = await db
     .select({ 
         orderId: order_files.order_id 
@@ -13,14 +13,12 @@ const shouldKeepFile = async (azureUrl: string) => {
     .where(eq(order_files.file_url, azureUrl))
     .limit(1);
 
-  // If not in DB, it's an orphan -> Delete (Return false)
   if (fileRecord.length === 0) return false;
 
   const orderId = fileRecord[0].orderId;
-  
-  if (!orderId) return false; // Should not happen given schema, but safe check
+  if (!orderId) return false; 
 
-  // 2. Check the Order Status
+  // 2. Check Order Status
   const order = await db
     .select({ status: orders.status })
     .from(orders)
@@ -31,14 +29,20 @@ const shouldKeepFile = async (azureUrl: string) => {
 
   const status = order[0].status;
 
-  // 3. Logic: Keep only if Active
-  // Active statuses: QUEUED, PRINTING
-  // Delete if: COMPLETED, FAILED, REFUNDED
-  if (status === 'QUEUED' || status === 'PRINTING' || status === "DRAFT") {
-      return true; // Keep it
+  if (status === 'QUEUED' || status === 'PRINTING') {
+      return true; 
+  }
+  const DRAFT_TTL = 60 * 60 * 1000; 
+  
+  if (status === 'DRAFT') {
+      if (fileAgeMs < DRAFT_TTL) return true;
+      return false;
+  }
+  if (status === 'CANCELLED' || status === 'COMPLETED' || status === 'FAILED') {
+      return false; 
   }
 
-  return false; // Delete it
+  return false; // Default delete (safeguard)
 };
 
 export const startCleanupJob = () => {
@@ -49,24 +53,18 @@ export const startCleanupJob = () => {
     try {
       const files = await listFilesFromAzure();
       const now = Date.now();
-      // const TIME_LIMIT = 24 * 60 * 60 * 1000; // 24 Hours (Production)
-      const TIME_LIMIT = 3 * 60 * 1000; // 3 Minutes (Testing)
+      const SAFETY_BUFFER = 60 * 1000; 
 
       for (const file of files) {
         if (!file.createdOn) continue;
         
         const fileAge = now - file.createdOn.getTime();
+        if (fileAge < SAFETY_BUFFER) continue;
+        const keep = await shouldKeepFile(file.url, fileAge);
 
-        if (fileAge > TIME_LIMIT) {
-            // Check comprehensive logic
-            const keep = await shouldKeepFile(file.url);
-
-            if (!keep) {
-                console.log(`🗑️ Deleting file: ${file.name}`);
-                await deleteFileFromAzure(file.url);
-            } else {
-                // console.log(`🛡️ Keeping active file: ${file.name}`);
-            }
+        if (!keep) {
+            console.log(`🗑️ Deleting file: ${file.name}`);
+            await deleteFileFromAzure(file.url);
         }
       }
     } catch (err) {
