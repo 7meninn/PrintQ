@@ -5,7 +5,7 @@ import { eq, sql, and, or, inArray, gt } from "drizzle-orm";
 
 export const getShops = async (req: Request, res: Response) => {
   try {
-    const thirtySecondsAgo = new Date(Date.now() - 15 * 1000);
+    const thirtySecondsAgo = new Date(Date.now() - 45 * 1000);
 
     const activeShops = await db
       .select({

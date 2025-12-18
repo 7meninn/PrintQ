@@ -1,0 +1,111 @@
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+
+const StationContext = createContext();
+
+export const useStation = () => useContext(StationContext);
+
+export function StationProvider({ children }) {
+  const [station, setStation] = useState(null); 
+  const [printers, setPrinters] = useState([]);
+  const [config, setConfig] = useState({ bw: "Not Available", color: "Not Available" });
+  
+  // 'idle' | 'active' | 'paused'
+  const [serviceStatus, setServiceStatus] = useState("idle");
+
+  // Refs to hold latest state for the interval (prevents closure staleness)
+  const stateRef = useRef({ station: null, config: { bw: "Not Available", color: "Not Available" }, status: "idle" });
+
+  // Sync Refs whenever state changes
+  useEffect(() => {
+    stateRef.current = { station, config, status: serviceStatus };
+  }, [station, config, serviceStatus]);
+
+  // --- 1. Load Hardware ---
+  useEffect(() => {
+    const loadHardware = async () => {
+      try {
+        if (window.electronAPI) {
+          const list = await window.electronAPI.getPrinters();
+          setPrinters(list || []);
+        }
+      } catch (err) {
+        console.error("Hardware Scan Failed:", err);
+      }
+    };
+    loadHardware();
+  }, []);
+
+  // --- 2. Heartbeat Engine (Always Running if Logged In) ---
+  useEffect(() => {
+    const sendHeartbeat = async () => {
+      const { station, config, status } = stateRef.current;
+      
+      // Only send if logged in
+      if (!station?.id) return;
+
+      const isLive = status === 'active';
+      // Calculate capabilities based on ACTIVE status + CONFIG
+      const has_bw = isLive && config.bw !== "Not Available";
+      const has_color = isLive && config.color !== "Not Available";
+
+      try {
+        // Send heartbeat to server
+        await fetch("http://localhost:3000/shop/heartbeat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            id: station.id, 
+            has_bw, 
+            has_color 
+          })
+        });
+        // Uncomment to debug heartbeat logs in console
+        // console.log(`💓 Heartbeat: Status=${status}, BW=${has_bw}, Color=${has_color}`);
+      } catch (e) {
+        console.error("Heartbeat Failed (Server Offline?):", e.message);
+      }
+    };
+
+    // Send immediately on status change
+    if (station) sendHeartbeat();
+
+    // Set interval to 4 seconds (safer than 5s for a 15s window)
+    const interval = setInterval(sendHeartbeat, 4000);
+
+    return () => clearInterval(interval);
+  }, [serviceStatus, station?.id]); // Restart only if status/user changes, NOT config
+
+  // --- Actions ---
+  
+  const login = (stationData) => {
+    setStation(stationData);
+  };
+
+  const logout = () => {
+    // Send one final "Offline" signal
+    if (station?.id) {
+        fetch("http://localhost:3000/shop/heartbeat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: station.id, has_bw: false, has_color: false })
+        }).catch(e => console.error(e));
+    }
+    setStation(null);
+    setServiceStatus("idle");
+  };
+
+  return (
+    <StationContext.Provider value={{ 
+      station, 
+      printers, 
+      config, 
+      setConfig, 
+      serviceStatus, 
+      setServiceStatus,
+      login, 
+      logout 
+    }}>
+      {children}
+    </StationContext.Provider>
+  );
+}

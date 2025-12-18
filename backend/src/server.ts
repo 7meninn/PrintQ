@@ -8,9 +8,8 @@ import { getShops } from "./controllers/shops.controller";
 import { prepareOrder, initiatePayment, confirmOrder, cancelOrder } from "./controllers/orders.controller";
 import { 
   shopLogin, getPendingJobs, completeJob, shopHeartbeat, failJob,
-  createShop, deleteShop
+  createShop, deleteShop, getShopHistory
 } from "./controllers/shop_client.controller";
-import { uploadLimiter } from "./services/ratelimiter.service"
 
 // Jobs
 import { startCleanupJob } from "./cron/cleanup";
@@ -71,7 +70,7 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-app.post("/orders/preview", uploadLimiter, handleUpload, prepareOrder);
+app.post("/orders/preview", handleUpload, prepareOrder);
 app.post("/orders/initiate", initiatePayment);           // Secure Init
 app.post("/orders/confirm", confirmOrder);
 app.post("/orders/cancel", cancelOrder);
@@ -81,6 +80,7 @@ app.post("/shop/login", shopLogin);
 app.post("/shop/heartbeat", shopHeartbeat);
 app.get("/shop/orders", getPendingJobs);
 app.post("/shop/complete", completeJob);
+app.get("/shop/history", getShopHistory);
 app.post("/shop/fail", failJob);
 
 // Start Background Jobs

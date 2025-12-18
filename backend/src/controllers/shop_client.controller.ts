@@ -3,6 +3,7 @@ import { db } from "../db/connection";
 import { orders, order_files, shops, users } from "../db/schema"; 
 import { eq, and, inArray } from "drizzle-orm";
 import { sendOrderReadyEmail } from "../services/email.service";
+import { sql } from "drizzle-orm";
 
 export const createShop = async (req: Request, res: Response) => {
   try {
@@ -118,12 +119,14 @@ export const getPendingJobs = async (req: Request, res: Response) => {
           url: f.file_url,
           filename: f.file_url.split('/').pop() || `file_${f.id}`,
           copies: f.copies,
-          color: f.color
+          color: f.color,
+          pages: f.pages
         }));
 
         return {
           order_id: order.id,
           created_at: order.created_at,
+          user_name: order.user_name,
           files: realFiles 
         };
       });
@@ -182,4 +185,110 @@ export const failJob = async (req: Request, res: Response) => {
         console.error("Fail Job Error:", error);
         res.status(500).json({ error: error.message });
     }
+};
+
+export const getShopHistory = async (req: Request, res: Response) => {
+  try {
+    const shopId = Number(req.query.shop_id);
+    const dateStr = req.query.date as string; // Format: YYYY-MM-DD
+
+    if (!shopId || isNaN(shopId) || !dateStr) {
+      return res.status(400).json({ error: "Invalid Shop ID or Date" });
+    }
+
+    // 1. Fetch Orders for the date
+    const historyOrders = await db.select({
+        id: orders.id,
+        created_at: orders.created_at,
+        status: orders.status,
+        user_name: users.name
+      })
+      .from(orders)
+      .leftJoin(users, eq(orders.user_id, users.id))
+      .where(and(
+        eq(orders.shop_id, shopId),
+        inArray(orders.status, ["COMPLETED", "FAILED"]),
+        sql`DATE(${orders.created_at}) = ${dateStr}`
+      ))
+      .orderBy(sql`${orders.created_at} DESC`);
+
+    if (historyOrders.length === 0) {
+      return res.json({ 
+        summary: { total_earnings: 0, total_orders: 0, bw_pages: 0, color_pages: 0 }, 
+        orders: [] 
+      });
+    }
+
+    const orderIds = historyOrders.map(o => o.id);
+
+    // 2. Fetch Files
+    const fileData = await db
+      .select({
+        order_id: order_files.order_id,
+        color: order_files.color,
+        pages: order_files.pages,
+        copies: order_files.copies
+      })
+      .from(order_files)
+      .where(inArray(order_files.order_id, orderIds));
+
+    // 3. Process & Calculate Earnings (Station Rates)
+    const STATION_BW_RATE = 2;
+    const STATION_COLOR_RATE = 12;
+
+    let dailyEarnings = 0;
+    let dailyBW = 0;
+    let dailyColor = 0;
+
+    const formattedOrders = historyOrders.map(order => {
+      const files = fileData.filter(f => f.order_id === order.id);
+      
+      let bwPages = 0;
+      let colorPages = 0;
+
+      files.forEach(f => {
+        const pgs = (f.pages || 1) * (f.copies || 1);
+        if (f.color) colorPages += pgs;
+        else bwPages += pgs;
+      });
+
+      // Calculate Earnings based on Station Rates
+      const earning = (bwPages * STATION_BW_RATE) + (colorPages * STATION_COLOR_RATE);
+
+      // Only add to totals if completed
+      if (order.status === 'COMPLETED') {
+        dailyEarnings += earning;
+        dailyBW += bwPages;
+        dailyColor += colorPages;
+      }
+
+      return {
+        order_id: order.id,
+        timestamp: order.created_at,
+        status: order.status,
+        customer: order.user_name || "Guest",
+        details: {
+          bw_pages: bwPages,
+          color_pages: colorPages
+        },
+        financials: {
+          shop_earnings: earning
+        }
+      };
+    });
+
+    res.json({
+      summary: {
+        total_earnings: dailyEarnings,
+        total_orders: historyOrders.length,
+        bw_pages: dailyBW,
+        color_pages: dailyColor
+      },
+      orders: formattedOrders
+    });
+
+  } catch (error: any) {
+    console.error("History Error:", error);
+    res.status(500).json({ error: error.message });
+  }
 };
