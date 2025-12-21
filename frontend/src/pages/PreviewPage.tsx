@@ -157,7 +157,7 @@ export default function PreviewPage() {
       formData.append('shop_id', String(state.shop_id));
       if(user?.id) formData.append('user_id', String(user.id));
 
-      const initRes = await fetch("http://localhost:3000/orders/preview", {
+      const initRes = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/orders/preview", {
         method: "POST",
         body: formData
       });
@@ -179,7 +179,7 @@ export default function PreviewPage() {
       }
 
       setStatusMessage("Redirecting to PhonePe...");
-      const paymentRes = await fetch("http://localhost:3000/orders/initiate", {
+      const paymentRes = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/orders/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 

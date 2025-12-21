@@ -43,7 +43,7 @@ export default function HomePage() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:3000/auth/login", {
+      const res = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -71,7 +71,7 @@ export default function HomePage() {
     setError("");
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:3000/auth/signup/initiate", {
+      const res = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/auth/signup/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -93,7 +93,7 @@ export default function HomePage() {
     setError("");
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:3000/auth/signup/complete", {
+      const res = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/auth/signup/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password, otp }),
@@ -128,7 +128,7 @@ export default function HomePage() {
     }
 
     try {
-      const res = await fetch("http://localhost:3000/auth/forgot-password", {
+      const res = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

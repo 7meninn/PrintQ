@@ -47,7 +47,7 @@ export default function UploadPage() {
     const fetchShops = async (silent = false) => {
       if (!silent) setIsLoadingShops(true);
       try {
-        const res = await fetch("http://localhost:3000/shops");
+        const res = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/shops");
         if (res.ok) {
             const data: Shop[] = await res.json();
             if (isMounted) {

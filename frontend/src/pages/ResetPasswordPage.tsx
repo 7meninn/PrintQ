@@ -37,7 +37,7 @@ export default function ResetPasswordPage() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("http://localhost:3000/auth/reset-password", {
+      const res = await fetch("https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, newPassword: password }),

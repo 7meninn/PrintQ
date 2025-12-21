@@ -68,7 +68,7 @@ export default function UserHistoryPage() {
 
     const fetchActive = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/user/active?user_id=${user.id}`);
+        const res = await fetch(`https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/user/active?user_id=${user.id}`);
         if (res.ok) {
           const data: ActiveOrder | null = await res.json();
           
@@ -104,7 +104,7 @@ export default function UserHistoryPage() {
     const fetchHistory = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`http://localhost:3000/user/history?user_id=${user.id}&date=${selectedDate}`);
+        const res = await fetch(`https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net/user/history?user_id=${user.id}&date=${selectedDate}`);
         if (res.ok) {
           const data = await res.json();
           setHistory(data);
