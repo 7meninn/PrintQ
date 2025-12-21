@@ -68,7 +68,7 @@ export default function RefundPolicy() {
             <p className="text-gray-600 leading-relaxed">
                 If you haven't received a refund after 7 days, please contact us with your <strong>Order ID</strong> at:
                 <br/>
-                <a href="mailto:payments@printq.com" className="text-blue-600 font-medium hover:underline">payments@printq.com</a>
+                <a href="mailto:support@printq.app" className="text-blue-600 font-medium hover:underline">support@printq.app</a>
             </p>
         </section>
 

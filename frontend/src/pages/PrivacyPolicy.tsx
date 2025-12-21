@@ -65,7 +65,7 @@ export default function PrivacyPolicy() {
         <section className="space-y-4">
             <h2 className="text-xl font-bold text-gray-900">4. Contact Us</h2>
             <p className="text-gray-600 leading-relaxed">
-                If you have questions about your data, please contact us at <strong>privacy@printq.app</strong>.
+                If you have questions about your data, please contact us at <strong>support@printq.app</strong>.
             </p>
         </section>
 
