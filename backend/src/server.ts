@@ -17,7 +17,7 @@ import {
 
 import { startCleanupJob } from "./cron/cleanup";
 import { startRefundJob } from "./cron/refund";
-import { getAdminStats, getAllOrders, getAllShops, getPayouts, markPayoutAsPaid, refundOrder } from "./controllers/admin.controller";
+import { failOrder, getAdminStats, getAllOrders, getAllShops, getPayouts, markPayoutAsPaid, refundOrder } from "./controllers/admin.controller";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -58,6 +58,7 @@ app.get("/admin/orders", adminAuth, getAllOrders);
 app.post("/admin/orders/refund", adminAuth, refundOrder);
 app.get("/admin/shops", adminAuth, getAllShops);
 app.get("/admin/payouts", adminAuth, getPayouts);
+app.post("/admin/orders/fail", adminAuth, failOrder);
 app.post("/auth/login", login);
 app.post("/auth/signup/initiate", initiateSignup);
 app.post("/auth/signup/complete", completeSignup);

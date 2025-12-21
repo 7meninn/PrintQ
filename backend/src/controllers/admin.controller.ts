@@ -1,18 +1,13 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
 import { orders, shops, users, payouts } from "../db/schema";
-import { createPayout } from "../services/payment.service";
-import { eq, desc, sql, and } from "drizzle-orm";
-// Assume you have a refund service wrapper
+import { eq, desc, sql, and, inArray, lt } from "drizzle-orm";
 import { refundRazorpayPayment } from "../services/payment.service"; 
 
-// --- 1. DASHBOARD STATS ---
 export const getAdminStats = async (req: Request, res: Response) => {
   try {
     const totalOrders = await db.select({ count: sql<number>`count(*)` }).from(orders);
     const totalShops = await db.select({ count: sql<number>`count(*)` }).from(shops);
-    
-    // Revenue Calculation (approximate from total_amount)
     const [revenue] = await db.select({ 
         sum: sql<number>`sum(cast(${orders.total_amount} as decimal))` 
     }).from(orders).where(eq(orders.status, 'COMPLETED'));
@@ -25,33 +20,68 @@ export const getAdminStats = async (req: Request, res: Response) => {
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 };
 
-// --- 2. ORDER MANAGEMENT ---
 export const getAllOrders = async (req: Request, res: Response) => {
   try {
-    const limit = Number(req.query.limit) || 50;
-    const offset = Number(req.query.offset) || 0;
-    
-    const allOrders = await db.select({
+    const orderId = req.query.order_id ? Number(req.query.order_id) : null;
+    const startDate = req.query.start_date as string;
+    const endDate = req.query.end_date as string;
+
+    let conditions = [];
+
+    if (orderId) {
+      conditions.push(eq(orders.id, orderId));
+    } else if (startDate && endDate) {
+      conditions.push(sql`DATE(${orders.created_at}) >= ${startDate}`);
+      conditions.push(sql`DATE(${orders.created_at}) <= ${endDate}`);
+    }
+
+    const query = db.select({
         id: orders.id,
         status: orders.status,
         amount: orders.total_amount,
         created_at: orders.created_at,
         shop: shops.name,
+        shop_id: orders.shop_id,
         user: users.email,
         razorpay_payment_id: orders.razorpay_payment_id
     })
     .from(orders)
     .leftJoin(shops, eq(orders.shop_id, shops.id))
     .leftJoin(users, eq(orders.user_id, users.id))
-    .orderBy(desc(orders.created_at))
-    .limit(limit)
-    .offset(offset);
+    .orderBy(desc(orders.created_at));
 
-    res.json(allOrders);
+    if (conditions.length > 0) {
+      query.where(and(...conditions));
+    } else {
+      query.limit(50);
+    }
+
+    const rawOrders = await query;
+
+    const enrichedOrders = await Promise.all(rawOrders.map(async (order) => {
+        let queuePos = null;
+
+        if (order.status === 'QUEUED' || order.status === 'PRINTING') {
+            const [res] = await db.select({ count: sql<number>`count(*)` })
+                .from(orders)
+                .where(and(
+                    eq(orders.shop_id, order.shop_id!), // Same shop
+                    inArray(orders.status, ["QUEUED", "PRINTING"]), // Active Status
+                    lt(orders.id, order.id) // Created before this one
+                ));
+            
+            queuePos = Number(res.count) + 1;
+        }
+
+        return { ...order, queue_position: queuePos };
+    }));
+
+    res.json(enrichedOrders);
+
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 };
 
-// 🌟 CRITICAL: Manual Refund Logic
+// --- MANUAL REFUND ---
 export const refundOrder = async (req: Request, res: Response) => {
   try {
     const { order_id, reason } = req.body;
@@ -78,6 +108,24 @@ export const refundOrder = async (req: Request, res: Response) => {
     console.error("Refund Failed:", e);
     res.status(500).json({ error: e.message });
   }
+};
+
+// --- NEW: FORCE FAIL ORDER ---
+export const failOrder = async (req: Request, res: Response) => {
+    try {
+        const { order_id, reason } = req.body;
+        
+        await db.update(orders)
+            .set({ status: "FAILED" })
+            .where(eq(orders.id, order_id));
+
+        console.log(`Admin Force-Failed Order #${order_id}: ${reason}`);
+        res.json({ success: true, message: "Order marked as FAILED." });
+
+    } catch (e: any) {
+        console.error("Force Fail Error:", e);
+        res.status(500).json({ error: e.message });
+    }
 };
 
 // --- 3. SHOP MANAGEMENT ---
