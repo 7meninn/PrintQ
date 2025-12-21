@@ -1,76 +1,86 @@
-import { Mail, Phone, MapPin, Send } from "lucide-react";
+import { Mail, MessageCircle, AlertCircle, CheckCircle2 } from "lucide-react";
 import Footer from "../components/Footer";
 
 export default function Contact() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <div className="bg-blue-600 py-16">
-        <div className="max-w-4xl mx-auto px-6 text-center text-white">
-            <h1 className="text-4xl font-bold mb-4">Get in touch</h1>
-            <p className="text-blue-100 text-lg">We are here to help you with your printing needs.</p>
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-gray-900">
+      
+      {/* Header Hero */}
+      <div className="bg-blue-600 pt-20 pb-24">
+        <div className="max-w-3xl mx-auto px-6 text-center text-white">
+            <div className="inline-flex items-center gap-2 bg-blue-500/30 px-4 py-1.5 rounded-full text-sm font-medium mb-6 backdrop-blur-sm border border-blue-400/30">
+               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+               Support Online
+            </div>
+            <h1 className="text-4xl md:text-5xl font-extrabold mb-6 tracking-tight leading-tight">
+               How can we help?
+            </h1>
+            <p className="text-blue-100 text-lg max-w-2xl mx-auto leading-relaxed">
+               PrintQ is built and maintained by students, for students. We might not have a call center, but we read every email.
+            </p>
         </div>
       </div>
 
-      <div className="flex-1 max-w-4xl mx-auto px-6 -mt-10 mb-12 w-full">
-        <div className="bg-white rounded-2xl shadow-xl p-8 grid grid-cols-1 md:grid-cols-2 gap-12">
-            
-            {/* Info */}
-            <div className="space-y-8">
-                <div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-6">Contact Information</h3>
-                    <div className="space-y-6">
-                        <div className="flex items-start gap-4">
-                            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Mail size={20}/></div>
-                            <div>
-                                <p className="font-bold text-gray-900">Email</p>
-                                <p className="text-gray-500">support@printq.com</p>
-                                <p className="text-gray-500">payments@printq.com</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-4">
-                            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Phone size={20}/></div>
-                            <div>
-                                <p className="font-bold text-gray-900">Phone</p>
-                                <p className="text-gray-500">+91 98765 43210</p>
-                                <p className="text-xs text-gray-400 mt-1">Mon-Fri, 9am - 5pm</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-4">
-                            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><MapPin size={20}/></div>
-                            <div>
-                                <p className="font-bold text-gray-900">Office</p>
-                                <p className="text-gray-500">Block B, Innovation Hub</p>
-                                <p className="text-gray-500">University Campus, India</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+      {/* Main Content */}
+      <div className="flex-1 max-w-3xl mx-auto px-6 -mt-12 mb-20 w-full relative z-10">
+        
+        {/* Support Card */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            <div className="p-8 md:p-10 text-center">
+               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                  <Mail size={32} />
+               </div>
+               
+               <h2 className="text-2xl font-bold text-gray-900 mb-2">Email Support</h2>
+               <p className="text-gray-500 mb-8 max-w-md mx-auto">
+                  For refunds, failed orders, or account issues, please drop us a mail. We usually reply within 48 hours.
+               </p>
+
+               <a 
+                  href="mailto:support@printq.app" 
+                  className="inline-flex items-center justify-center gap-3 bg-gray-900 hover:bg-black text-white px-8 py-4 rounded-xl font-bold text-lg transition-all active:scale-95 shadow-lg shadow-gray-200"
+               >
+                  <MessageCircle size={20} />
+                  support@printq.app
+               </a>
             </div>
 
-            {/* Form Placeholder */}
-            <div className="bg-gray-50 rounded-xl p-6">
-                <h3 className="font-bold text-gray-900 mb-4">Send us a message</h3>
-                <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
-                        <input type="text" className="w-full rounded-lg border-gray-200 focus:ring-blue-500 focus:border-blue-500" placeholder="Your name" />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
-                        <input type="email" className="w-full rounded-lg border-gray-200 focus:ring-blue-500 focus:border-blue-500" placeholder="john@example.com" />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Message</label>
-                        <textarea className="w-full rounded-lg border-gray-200 focus:ring-blue-500 focus:border-blue-500 h-24" placeholder="How can we help?"></textarea>
-                    </div>
-                    <button className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition-colors flex items-center justify-center gap-2">
-                        Send Message <Send size={16} />
-                    </button>
-                </form>
-            </div>
+            {/* Instructions Section */}
+            <div className="bg-gray-50 p-8 md:p-10 border-t border-gray-100">
+               <div className="flex items-start gap-4 mb-6">
+                  <AlertCircle className="text-blue-600 shrink-0 mt-1" size={24} />
+                  <div>
+                     <h3 className="font-bold text-gray-900 text-lg">Help us resolve it faster</h3>
+                     <p className="text-gray-500 text-sm mt-1">
+                        To speed up your request, please include these details in your email body. No formal formatting needed!
+                     </p>
+                  </div>
+               </div>
 
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
+                     <CheckCircle2 size={20} className="text-green-500 shrink-0" />
+                     <span className="font-bold text-gray-700 text-sm">Order ID</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
+                     <CheckCircle2 size={20} className="text-green-500 shrink-0" />
+                     <span className="font-bold text-gray-700 text-sm">Shop Name</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
+                     <CheckCircle2 size={20} className="text-green-500 shrink-0" />
+                     <span className="font-bold text-gray-700 text-sm">Registered Email</span>
+                  </div>
+               </div>
+            </div>
         </div>
+
+        {/* Note */}
+        <p className="text-center text-gray-400 text-sm mt-8 font-medium">
+           We appreciate your patience and support! 💙
+        </p>
+
       </div>
+      
       <Footer />
     </div>
   );

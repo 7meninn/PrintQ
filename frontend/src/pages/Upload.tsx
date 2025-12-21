@@ -6,7 +6,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { 
   UploadCloud, FileText, X, Minus, Plus, Store, Palette, 
   ChevronDown, ChevronUp, Loader2, AlertCircle, RefreshCw, 
-  Printer, LogOut, User as UserIcon, ChevronRight
+  Printer, LogOut, User as UserIcon, ChevronRight, History, Eye
 } from "lucide-react";
 import Footer from "../components/Footer";
 
@@ -37,6 +37,9 @@ export default function UploadPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
+  
+  // NEW: State for viewing files
+  const [viewFile, setViewFile] = useState<File | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -95,20 +98,24 @@ export default function UploadPage() {
   };
 
   const processFiles = (newFiles: File[]) => {
-    const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+    const MAX_TOTAL_SIZE = 60 * 1024 * 1024; // 60 MB Total Limit
+    
+    let currentTotalSize = files.reduce((acc, f) => acc + f.file.size, 0);
+    
     const validFiles: File[] = [];
-    const oversizedFiles: string[] = [];
+    const skippedFiles: string[] = [];
 
-    newFiles.forEach(file => {
-        if (file.size > MAX_SIZE_BYTES) {
-            oversizedFiles.push(file.name);
+    for (const file of newFiles) {
+        if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+            skippedFiles.push(file.name);
         } else {
             validFiles.push(file);
+            currentTotalSize += file.size;
         }
-    });
+    }
 
-    if (oversizedFiles.length > 0) {
-        alert(`The following files exceed the 20MB limit and were skipped:\n\n- ${oversizedFiles.join('\n- ')}`);
+    if (skippedFiles.length > 0) {
+        alert(`Storage Limit Exceeded (60MB Total). The following files were skipped:\n\n- ${skippedFiles.join('\n- ')}`);
     }
 
     if (validFiles.length > 0) {
@@ -179,12 +186,23 @@ export default function UploadPage() {
     setIsProcessing(true);
 
     try {
+        const shop = shops.find(s => s.id === selectedShopId);
+        
         // 1. Generate Separator
         const separatorFile = await generateSeparator();
-        const separatorItem = { file: separatorFile, color: false, copies: 1 };
+        
+        // 2. Determine Logic: 
+        // If shop has B/W printer -> Use B/W (Cost: 2)
+        // If shop ONLY has Color -> Force Color (Cost: 12)
+        const isBwAvailable = shop?.has_bw;
+        
+        const separatorItem = { 
+            file: separatorFile, 
+            color: !isBwAvailable, // True if BW is missing
+            copies: 1 
+        };
         
         const filesToPreview = [separatorItem, ...files];
-        const shop = shops.find(s => s.id === selectedShopId);
         
         navigate("/preview", { 
             state: { 
@@ -229,6 +247,16 @@ export default function UploadPage() {
             <div className="hidden sm:block bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-blue-100">
                {files.length} Files Added
             </div>
+            
+            <button 
+              onClick={() => navigate("/history")} 
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+              title="Order History"
+            >
+              <History size={18} />
+              <span className="hidden sm:inline">Order History</span>
+            </button>
+
             <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm border border-gray-200">
@@ -254,7 +282,7 @@ export default function UploadPage() {
                         <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
                         <div className="flex flex-col items-center space-y-4 text-center z-10">
                             <div className={`p-4 rounded-full transition-transform duration-300 group-hover:scale-110 ${isDragging ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"}`}><UploadCloud size={32} /></div>
-                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, PNG, JPG (Max 20MB)</p></div>
+                            <div><p className="text-lg text-gray-700 font-semibold"><span className="text-blue-600">Click to upload</span> or drag & drop</p><p className="text-sm text-gray-400 mt-1">PDF, PNG, JPG (Max 60MB Total)</p></div>
                         </div>
                     </div>
                 </section>
@@ -272,7 +300,17 @@ export default function UploadPage() {
                                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${item.color ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-500'}`}>{item.file.name.endsWith('pdf') ? <FileText size={24} /> : <Printer size={24} />}</div>
                                         <div className="min-w-0"><p className="font-medium text-gray-900 truncate text-sm sm:text-base">{item.file.name}</p><p className="text-xs text-gray-500">{(item.file.size / 1024 / 1024).toFixed(2)} MB</p></div>
                                     </div>
+                                    
                                     <div className="flex items-center justify-between sm:justify-end gap-4 mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-0 border-gray-100 w-full sm:w-auto">
+                                        {/* View File Button */}
+                                        <button 
+                                          onClick={() => setViewFile(item.file)} 
+                                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                          title="View File"
+                                        >
+                                          <Eye size={18} />
+                                        </button>
+
                                         <button onClick={() => toggleColor(idx)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${item.color ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}><Palette size={14} />{item.color ? "Color" : "B&W"}</button>
                                         <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5"><button onClick={() => changeCopies(idx, -1)} disabled={item.copies <= 1} className="p-1.5 hover:bg-white rounded-md text-gray-600 disabled:opacity-30 transition-all"><Minus size={14} /></button><span className="w-8 text-center text-sm font-bold text-gray-900">{item.copies}</span><button onClick={() => changeCopies(idx, 1)} className="p-1.5 hover:bg-white rounded-md text-gray-600 transition-all"><Plus size={14} /></button></div>
                                     </div>
@@ -365,6 +403,30 @@ export default function UploadPage() {
             </button>
         </div>
       </div>
+
+      {/* --- NEW: View File Modal --- */}
+      {viewFile && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setViewFile(null)}>
+              <div className="bg-white rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-between items-center p-4 border-b">
+                      <h3 className="font-bold text-lg text-gray-800 truncate pr-4">{viewFile.name}</h3>
+                      <button onClick={() => setViewFile(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
+                  </div>
+                  <div className="flex-1 bg-gray-100 p-4 flex items-center justify-center overflow-auto">
+                      {viewFile.type === 'application/pdf' ? (
+                          <iframe 
+                            src={URL.createObjectURL(viewFile)} 
+                            className="w-full h-full rounded-lg border shadow-sm"
+                            title="PDF Viewer"
+                          />
+                      ) : (
+                          <img src={URL.createObjectURL(viewFile)} alt="Preview" className="max-h-full max-w-full rounded-lg shadow-md object-contain" />
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 }

@@ -7,7 +7,7 @@ export default function PrivacyPolicy() {
       <div className="bg-white border-b py-12">
         <div className="max-w-4xl mx-auto px-6">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
-            <p className="text-gray-500">Last updated: December 2024</p>
+            <p className="text-gray-500">Last updated: December 2025</p>
         </div>
       </div>
 
@@ -65,7 +65,7 @@ export default function PrivacyPolicy() {
         <section className="space-y-4">
             <h2 className="text-xl font-bold text-gray-900">4. Contact Us</h2>
             <p className="text-gray-600 leading-relaxed">
-                If you have questions about your data, please contact us at <strong>privacy@printq.com</strong>.
+                If you have questions about your data, please contact us at <strong>privacy@printq.app</strong>.
             </p>
         </section>
 

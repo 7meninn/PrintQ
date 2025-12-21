@@ -43,10 +43,8 @@ export default function Footer() {
 
           {/* Contact Snippet */}
           <div>
-            <h3 className="font-bold text-gray-900 mb-4">Contact</h3>
-            <p className="text-sm text-gray-500 mb-2">University Campus, Block B</p>
-            <p className="text-sm text-gray-500 mb-2">support@printq.com</p>
-            <p className="text-sm text-gray-500">+91 98765 43210</p>
+            <h3 className="font-bold text-gray-900 mb-4">Contact Us</h3>
+            <p className="text-sm text-gray-500 mb-2">support@printq.app</p>
           </div>
         </div>
 

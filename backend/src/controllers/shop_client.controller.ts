@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 
 export const createShop = async (req: Request, res: Response) => {
   try {
-    const { name, location, password } = req.body;
+    const { name, location, password, upi_id } = req.body;
 
     if (!name || !location || !password) {
       return res.status(400).json({ error: "Name, Location, and Password are required" });
@@ -17,6 +17,7 @@ export const createShop = async (req: Request, res: Response) => {
       name,
       location,
       password,
+      upi_id: upi_id || null,
       has_bw: false,
       has_color: false
     }).returning();

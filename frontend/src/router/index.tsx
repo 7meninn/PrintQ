@@ -7,6 +7,8 @@ import PrivacyPolicy from "../pages/PrivacyPolicy";
 import Terms from "../pages/Terms";
 import RefundPolicy from "../pages/RefundPolicy";
 import Contact from "../pages/Contact";
+import UserHistoryPage from "../pages/UserHistoryPage";
+import ResetPasswordPage from "../pages/ResetPasswordPage";
 
 export default function AppRouter() {
   return (
@@ -20,6 +22,8 @@ export default function AppRouter() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/refunds" element={<RefundPolicy />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/history" element={<UserHistoryPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Routes>
     </BrowserRouter>
   );

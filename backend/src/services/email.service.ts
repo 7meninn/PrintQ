@@ -59,3 +59,23 @@ export const sendRefundEmail = async (email: string, orderId: number, amount: st
     <p>A refund of <strong>Rs. ${amount}</strong> has been initiated to your original payment method.</p>
   `);
 };
+
+export const sendPasswordRecoveryEmail = async (email: string, resetLink: string) => {
+  const mailOptions = {
+    from: '"PrintQ Security" <support@printq.com>',
+    to: email,
+    subject: "Reset Your Password - PrintQ",
+    text: `You requested a password reset. Click the link below to reset your password:\n\n${resetLink}\n\nThis link is valid for 1 hour.`,
+    html: `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #2563eb;">Reset Password</h2>
+        <p>Hello,</p>
+        <p>You requested to reset your password. Click the button below to proceed:</p>
+        <a href="${resetLink}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin: 20px 0;">Reset Password</a>
+        <p style="font-size: 14px;">Or copy this link: <br/><a href="${resetLink}">${resetLink}</a></p>
+        <p style="font-size: 12px; color: #666; margin-top: 20px;">Link expires in 1 hour. If you didn't request this, please ignore this email.</p>
+      </div>
+    `
+  };
+  await transporter.sendMail(mailOptions);
+};

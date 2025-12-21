@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { 
-  Loader2, Mail, Lock, User, Printer, 
+  Loader2, Mail, Lock, User, 
   AlertCircle, XCircle, Key, CheckCircle, 
-  Zap, Shield, Smartphone
+  Printer
 } from "lucide-react";
 import Footer from "../components/Footer";
 
@@ -12,9 +12,11 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { user, login, isLoading } = useAuth();
   
-  const [view, setView] = useState<"login" | "signup-email" | "signup-otp" | "signup-details">("login");
+  // Added "forgot-password" state
+  const [view, setView] = useState<"login" | "signup-email" | "signup-otp" | "signup-details" | "forgot-password">("login");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   // Form States
   const [email, setEmail] = useState("");
@@ -26,7 +28,7 @@ export default function HomePage() {
     if (!isLoading && user) navigate("/upload");
   }, [user, isLoading, navigate]);
 
-  // Validation logic - CHANGED to only accept @gmail.com
+  // Validation logic
   const isDomainInvalid = email.length > 0 && !email.toLowerCase().endsWith("@gmail.com");
 
   // 🔹 1. Handle Login
@@ -34,7 +36,6 @@ export default function HomePage() {
     e.preventDefault();
     setError("");
     
-    // Optional: Enforce domain check on login as well
     if (isDomainInvalid) {
         setError("Only @gmail.com addresses are currently supported.");
         return;
@@ -113,6 +114,36 @@ export default function HomePage() {
     }
   };
 
+  // 🔹 4. Handle Forgot Password
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    setIsSubmitting(true);
+
+    if (isDomainInvalid) {
+      setError("Please enter a valid @gmail.com address.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("http://localhost:3000/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setSuccessMsg(data.message);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isLoading) return <div className="h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>;
 
   return (
@@ -170,10 +201,15 @@ export default function HomePage() {
                   {/* Card Header */}
                   <div className="px-8 pt-8 pb-4 bg-gray-50/50 border-b border-gray-100">
                     <h3 className="text-xl font-bold text-gray-900">
-                      {view === "login" ? "Welcome Back" : "Create Account"}
+                      {view === "login" ? "Welcome Back" : 
+                       view === "forgot-password" ? "Recover Password" : 
+                       "Create Account"}
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      {view === "signup-otp" ? "Check your email for the code" : view === "signup-details" ? "Almost there" : "Manage your prints efficiently"}
+                      {view === "signup-otp" ? "Check your email for the code" : 
+                       view === "signup-details" ? "Almost there" : 
+                       view === "forgot-password" ? "We'll send it to your email" :
+                       "Manage your prints efficiently"}
                     </p>
                   </div>
 
@@ -183,6 +219,13 @@ export default function HomePage() {
                       <div className="mb-6 p-4 bg-red-50 text-red-700 text-sm rounded-xl flex items-start gap-3 border border-red-100">
                         <AlertCircle size={18} className="mt-0.5 shrink-0"/>
                         <span>{error}</span>
+                      </div>
+                    )}
+
+                    {successMsg && (
+                      <div className="mb-6 p-4 bg-green-50 text-green-700 text-sm rounded-xl flex items-start gap-3 border border-green-100">
+                        <CheckCircle size={18} className="mt-0.5 shrink-0"/>
+                        <span>{successMsg}</span>
                       </div>
                     )}
 
@@ -204,7 +247,10 @@ export default function HomePage() {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-gray-700 uppercase mb-2 ml-1">Password</label>
+                          <div className="flex justify-between items-center mb-2 ml-1">
+                            <label className="block text-xs font-semibold text-gray-700 uppercase">Password</label>
+                            <button type="button" onClick={() => setView("forgot-password")} className="text-xs text-blue-600 font-medium hover:underline">Forgot?</button>
+                          </div>
                           <div className="relative">
                             <Lock className="absolute left-3 top-3.5 text-gray-400" size={18}/>
                             <input 
@@ -223,6 +269,45 @@ export default function HomePage() {
                         <div className="text-center pt-2">
                           <p className="text-sm text-gray-500">Don't have an account? <button type="button" onClick={() => setView("signup-email")} className="text-blue-600 font-bold hover:underline">Get Started</button></p>
                         </div>
+                      </form>
+                    )}
+
+                    {/* VIEW: FORGOT PASSWORD */}
+                    {view === "forgot-password" && (
+                      <form onSubmit={handleForgotPassword} className="space-y-6">
+                        {!successMsg ? (
+                          <>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 uppercase mb-2 ml-1">Enter your registered email</label>
+                              <div className="relative">
+                                <Mail className="absolute left-3 top-3.5 text-gray-400" size={18}/>
+                                <input 
+                                  type="email" 
+                                  value={email} 
+                                  onChange={e=>setEmail(e.target.value)} 
+                                  className="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" 
+                                  placeholder="student@gmail.com" 
+                                  required
+                                />
+                              </div>
+                            </div>
+                            <button disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-70 active:scale-[0.98]">
+                              {isSubmitting ? <Loader2 className="animate-spin mx-auto"/> : "Recover Password"}
+                            </button>
+                          </>
+                        ) : (
+                          <div className="text-center py-4">
+                            <p className="text-gray-500 text-sm mb-6">You can now login with your recovered password.</p>
+                            <button type="button" onClick={() => setView("login")} className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold hover:bg-black transition-all">
+                              Back to Login
+                            </button>
+                          </div>
+                        )}
+                        {!successMsg && (
+                          <div className="text-center pt-2">
+                            <button type="button" onClick={() => setView("login")} className="text-sm text-gray-500 hover:text-gray-900 transition-colors">← Back to Login</button>
+                          </div>
+                        )}
                       </form>
                     )}
 
@@ -286,42 +371,6 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* --- FEATURES SECTION --- */}
-        <div className="bg-white border-t border-gray-100 py-16 lg:py-24">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-             <div className="text-center mb-16">
-                <h2 className="text-3xl font-bold text-gray-900">Why Students Love PrintQ</h2>
-                <p className="text-gray-500 mt-4 max-w-2xl mx-auto">Designed for the modern campus. We handle the technical stuff so you can focus on your deadlines.</p>
-             </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-gray-50 hover:bg-blue-50 transition-colors duration-300">
-                  <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
-                    <Zap size={28} />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">Lightning Fast</h3>
-                  <p className="text-gray-500 leading-relaxed">Upload your files remotely. By the time you reach the station, your document is queued and ready.</p>
-                </div>
-
-                <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-gray-50 hover:bg-blue-50 transition-colors duration-300">
-                  <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
-                    <Shield size={28} />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">Secure Cloud</h3>
-                  <p className="text-gray-500 leading-relaxed">Your documents are encrypted and only accessible by you until the moment they are printed.</p>
-                </div>
-
-                <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-gray-50 hover:bg-blue-50 transition-colors duration-300">
-                  <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
-                    <Smartphone size={28} />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">Mobile Ready</h3>
-                  <p className="text-gray-500 leading-relaxed">Fully optimized for your phone. Handle your entire printing workflow from your pocket.</p>
-                </div>
-             </div>
           </div>
         </div>
       </div>

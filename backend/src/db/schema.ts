@@ -5,6 +5,9 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
+  last_password_reset: timestamp("last_password_reset"),
+  reset_token: text("reset_token"),
+  reset_token_expires: timestamp("reset_token_expires"),
   created_at: timestamp("created_at").defaultNow(),
 });
 
@@ -13,6 +16,7 @@ export const shops = pgTable("shops", {
   name: text("name").notNull(),
   location: text("location"),
   password: text("password").default("123456"),
+  upi_id: text("upi_id"),
   has_bw: boolean("has_bw").default(false),
   has_color: boolean("has_color").default(false),
   last_heartbeat: timestamp("last_heartbeat")
@@ -46,4 +50,15 @@ export const order_files = pgTable("order_files", {
   copies: integer("copies").default(1),
   color: boolean("color").default(false),
   cost: decimal("cost").notNull(),
+});
+
+export const payouts = pgTable("payouts", {
+  id: serial("id").primaryKey(),
+  shop_id: integer("shop_id").references(() => shops.id),
+  amount: decimal("amount").notNull(),
+  status: text("status").default("PENDING"),
+  bw_count: integer("bw_count").default(0),
+  color_count: integer("color_count").default(0),
+  transaction_ref: text("transaction_ref"),
+  created_at: timestamp("created_at").defaultNow(),
 });

@@ -45,7 +45,6 @@ export default function PreviewPage() {
     color_cost: 0,
     print_cost: 0,
     service_charge: 0,
-    separator_cost: 0,
     total_amount: 0
   });
 
@@ -62,17 +61,15 @@ export default function PreviewPage() {
     const calculateOrder = async () => {
       try {
         const BW_PRICE = 2;
-        const COLOR_PRICE = 15;
-        const SEPARATOR_COST = 2;
+        const COLOR_PRICE = 12;
         const SERVICE_CHARGE_PERCENTAGE = 0.25;
-        const MAX_SERVICE_CHARGE = 30; // 🔹 Cap limit
+        const MAX_SERVICE_CHARGE = 4;
 
         const results: ProcessedFile[] = [];
         let bwPages = 0;
         let colorPages = 0;
         let bwCostAccumulator = 0;
         let colorCostAccumulator = 0;
-        let separatorCostAccumulator = 0;
 
         for (const item of state.files) {
             let pageCount = 1;
@@ -84,24 +81,18 @@ export default function PreviewPage() {
             }
 
             const totalPages = pageCount * item.copies;
-            const isSeparator = item.file.name === "000_Separator.pdf";
             
-            let fileCost = 0;
+            // Standard Logic: Cost depends purely on item.color flag
+            // (Separator color flag is already set correctly by UploadPage)
+            const price = item.color ? COLOR_PRICE : BW_PRICE;
+            const fileCost = totalPages * price;
 
-            if (isSeparator) {
-                fileCost = SEPARATOR_COST;
-                separatorCostAccumulator += fileCost;
+            if (item.color) {
+                colorPages += totalPages;
+                colorCostAccumulator += fileCost;
             } else {
-                const price = item.color ? COLOR_PRICE : BW_PRICE;
-                fileCost = totalPages * price;
-
-                if (item.color) {
-                    colorPages += totalPages;
-                    colorCostAccumulator += fileCost;
-                } else {
-                    bwPages += totalPages;
-                    bwCostAccumulator += fileCost;
-                }
+                bwPages += totalPages;
+                bwCostAccumulator += fileCost;
             }
 
             results.push({
@@ -118,11 +109,11 @@ export default function PreviewPage() {
 
         const printCost = bwCostAccumulator + colorCostAccumulator;
         
-        // 🔹 Updated Logic: Service Charge = min(25% of printCost, 30)
+        // Service Charge: min(4, ceil(25% of Total))
         const rawServiceCharge = printCost * SERVICE_CHARGE_PERCENTAGE;
         const serviceCharge = Math.ceil(Math.min(rawServiceCharge, MAX_SERVICE_CHARGE));
 
-        const grandTotal = printCost + serviceCharge + separatorCostAccumulator;
+        const grandTotal = printCost + serviceCharge;
 
         setProcessedFiles(results);
         
@@ -133,7 +124,6 @@ export default function PreviewPage() {
             color_cost: colorCostAccumulator,
             print_cost: printCost,
             service_charge: serviceCharge,
-            separator_cost: separatorCostAccumulator,
             total_amount: grandTotal
         });
         
@@ -184,16 +174,19 @@ export default function PreviewPage() {
       const frontendTotal = summary.total_amount;
       
       if (Math.abs(backendTotal - frontendTotal) > 2) { 
-          if(!confirm(`Total adjusted by server to ₹${backendTotal} (was ₹${frontendTotal}). Proceed?`)) {
-              throw new Error("Cancelled by user");
-          }
+         if(!confirm(`Total adjusted by server to ₹${backendTotal} (was ₹${frontendTotal}). Proceed?`)) {
+             throw new Error("Cancelled by user");
+         }
       }
 
       setStatusMessage("Opening Payment Gateway...");
       const paymentRes = await fetch("http://localhost:3000/orders/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order_id: orderDraft.order_id })
+          body: JSON.stringify({ 
+             order_id: orderDraft.order_id,
+             user_id: user?.id 
+          })
       });
       const paymentData = await paymentRes.json();
 
@@ -214,8 +207,6 @@ export default function PreviewPage() {
             ondismiss: async function() {
                 setIsSubmitting(false);
                 setStatusMessage("Payment Cancelled");
-                
-                // ✅ NEW: Cancel the draft order on the backend to allow cleanup
                 try {
                     await fetch("http://localhost:3000/orders/cancel", {
                         method: "POST",
@@ -234,9 +225,8 @@ export default function PreviewPage() {
 
     } catch (error: any) {
       console.error(error);
-      // Only alert if it's not a user cancellation (which is handled in ondismiss)
       if (error.message !== "Cancelled by user") {
-          alert(`Error: ${error.message}`);
+         alert(`Error: ${error.message}`);
       }
       setIsSubmitting(false);
       setStatusMessage("");
@@ -247,6 +237,7 @@ export default function PreviewPage() {
       try {
         const payload = {
             order_id: orderId,
+            user_id: user?.id,
             razorpay_payment_id: paymentData.razorpay_payment_id,
             razorpay_signature: paymentData.razorpay_signature
         };
@@ -372,7 +363,7 @@ export default function PreviewPage() {
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Current Rates</h4>
                 <div className="space-y-2">
                     <div className="flex justify-between text-sm"><span className="text-gray-600 flex items-center gap-2"><Printer size={14}/> B&W Print</span><span className="font-bold text-gray-900">₹{2}.00 <span className="text-gray-400 font-normal">/ pg</span></span></div>
-                    <div className="flex justify-between text-sm"><span className="text-gray-600 flex items-center gap-2"><Palette size={14}/> Color Print</span><span className="font-bold text-gray-900">₹15.00 <span className="text-gray-400 font-normal">/ pg</span></span></div>
+                    <div className="flex justify-between text-sm"><span className="text-gray-600 flex items-center gap-2"><Palette size={14}/> Color Print</span><span className="font-bold text-gray-900">₹12.00 <span className="text-gray-400 font-normal">/ pg</span></span></div>
                 </div>
             </div>
 
@@ -392,12 +383,8 @@ export default function PreviewPage() {
                     <div className="h-px bg-gray-700 my-2"></div>
                     
                     <div className="flex justify-between items-center text-xs text-yellow-400">
-                        <span>Service Charge (Max ₹30)</span>
+                        <span>Service Charge (Max ₹4)</span>
                         <span>₹{summary.service_charge}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-blue-400">
-                        <span>Separator Page</span>
-                        <span>₹{summary.separator_cost}</span>
                     </div>
                 </div>
 
@@ -422,7 +409,7 @@ export default function PreviewPage() {
                       <h3 className="font-bold text-lg text-gray-800">{viewFile.name}</h3>
                       <button onClick={() => setViewFile(null)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
                   </div>
-                  <div className="flex-1 bg-gray-100 p-4">
+                  <div className="flex-1 bg-gray-100 p-4 flex items-center justify-center overflow-auto">
                       {viewFile.type === 'application/pdf' ? (
                           <iframe 
                             src={URL.createObjectURL(viewFile)} 
@@ -430,9 +417,7 @@ export default function PreviewPage() {
                             title="PDF Viewer"
                           />
                       ) : (
-                          <div className="flex items-center justify-center h-full">
-                              <img src={URL.createObjectURL(viewFile)} alt="Preview" className="max-h-full max-w-full rounded-lg shadow-md object-contain" />
-                          </div>
+                          <img src={URL.createObjectURL(viewFile)} alt="Preview" className="max-h-full max-w-full rounded-lg shadow-md object-contain" />
                       )}
                   </div>
               </div>

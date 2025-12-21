@@ -5,7 +5,8 @@ import { eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import { sendOrderPlacedEmail } from "../services/email.service";
 import { createRazorpayOrder, verifyPaymentSignature } from "../services/payment.service";
-import { uploadFileToAzure } from "../services/storage.service"; 
+import { uploadFileToAzure } from "../services/storage.service";
+import { and, inArray, sql, lt, desc } from "drizzle-orm";
 
 interface MulterFile {
   buffer: Buffer;
@@ -26,7 +27,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
     const userId = Number(req.body.user_id);
 
     const configs: FileConfig[] = configStr ? JSON.parse(configStr) : [];
-
+    
     if (!files || files.length === 0) return res.status(400).json({ error: "No files received" });
     if (!shopId) return res.status(400).json({ error: "Shop ID required" });
     if (!userId) return res.status(400).json({ error: "User ID required" });
@@ -34,28 +35,26 @@ export const prepareOrder = async (req: Request, res: Response) => {
     const shop = await db.query.shops.findFirst({ where: eq(shops.id, shopId) });
     if (!shop) return res.status(404).json({ error: "Selected shop not found" });
 
-    const processedFiles = [];
-    
-    // ✅ NEW PRICING CONSTANTS
     const BW_PRICE = 2;
-    const COLOR_PRICE = 15;
-    const SERVICE_CHARGE_PERCENTAGE = 0.25; // 25%
-    const MAX_SERVICE_CHARGE = 30; // Max Cap
+    const COLOR_PRICE = 12;
+    const SERVICE_CHARGE_PERCENTAGE = 0.25;
+    const MAX_SERVICE_CHARGE = 4;
 
     let summary = {
       total_bw_pages: 0,
       total_color_pages: 0,
       bw_cost: 0,
       color_cost: 0,
-      print_cost: 0,    // Pure cost of printing
-      service_charge: 0, // The 25% fee
-      total_amount: 0   // Final payable
+      print_cost: 0,
+      service_charge: 0,
+      total_amount: 0
     };
 
-    // 1. Process Files
+    const processedFiles = [];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const conf = configs[i] || { color: false, copies: 1 };
+      let conf = configs[i] || { color: false, copies: 1 };
       
       let detectedPages = 1;
       try {
@@ -67,10 +66,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
         console.error(`Error counting pages:`, err);
       }
 
-      // Upload to Azure
       const azureUrl = await uploadFileToAzure(file.buffer, file.originalname);
-
-      // Calc Cost
       const calculatedPages = detectedPages * conf.copies;
       const pricePerSheet = conf.color ? COLOR_PRICE : BW_PRICE;
       const fileCost = calculatedPages * pricePerSheet;
@@ -94,16 +90,13 @@ export const prepareOrder = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ CALCULATE FINAL TOTALS
+
     summary.print_cost = summary.bw_cost + summary.color_cost;
-    
-    // 🔹 Updated Logic: Service Charge = min(25% of print_cost, 30)
     const rawServiceCharge = summary.print_cost * SERVICE_CHARGE_PERCENTAGE;
     summary.service_charge = Math.ceil(Math.min(rawServiceCharge, MAX_SERVICE_CHARGE));
-
     summary.total_amount = summary.print_cost + summary.service_charge;
 
-    // 2. Create Draft Order
+
     const [draftOrder] = await db.insert(orders).values({
         user_id: userId,
         shop_id: shopId,
@@ -111,7 +104,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
         status: "DRAFT",
     } as any).returning();
 
-    // 3. Link Files
+
     for (const f of processedFiles) {
         await db.insert(order_files).values({
             order_id: draftOrder.id,
@@ -136,27 +129,24 @@ export const prepareOrder = async (req: Request, res: Response) => {
   }
 };
 
-// 🟢 PAYMENT INITIATE (Secure)
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
     const { order_id } = req.body; 
 
-    // Validate ID
     if (!order_id || isNaN(Number(order_id))) {
         return res.status(400).json({ error: "Invalid Order ID" });
     }
 
-    // 1. Fetch Order from DB (Source of Truth)
     const order = await db.query.orders.findFirst({
         where: eq(orders.id, Number(order_id))
     });
 
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    // 2. 🔒 SECURITY: Use DB Amount, ignore frontend amount
+
     const amount = Number(order.total_amount);
     
-    // 3. Create Razorpay Order
+
     const rzOrder = await createRazorpayOrder(amount);
     
     await db.update(orders)
@@ -166,7 +156,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
     res.json({ 
       success: true, 
       razorpay_order_id: rzOrder.id, 
-      amount: rzOrder.amount, // Returns amount in paise
+      amount: rzOrder.amount,
       key_id: process.env.RAZORPAY_KEY_ID 
     });
 
@@ -193,7 +183,6 @@ export const cancelOrder = async (req: Request, res: Response) => {
     }
 };
 
-// 🟢 CONFIRM ORDER
 export const confirmOrder = async (req: Request, res: Response) => {
   try {
     const { 
@@ -231,6 +220,108 @@ export const confirmOrder = async (req: Request, res: Response) => {
 
   } catch (err: any) {
     console.error("Confirm Order Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getUserHistory = async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.query.user_id);
+    const dateStr = req.query.date as string;
+
+    if (!userId || !dateStr) {
+      return res.status(400).json({ error: "User ID and Date required" });
+    }
+
+    const historyOrders = await db.select({
+        id: orders.id,
+        created_at: orders.created_at,
+        status: orders.status,
+        total_amount: orders.total_amount,
+        shop_name: shops.name,
+        shop_location: shops.location
+      })
+      .from(orders)
+      .leftJoin(shops, eq(orders.shop_id, shops.id))
+      .where(and(
+        eq(orders.user_id, userId),
+        inArray(orders.status, ["COMPLETED", "FAILED", "REFUNDED"]),
+        sql`DATE(${orders.created_at}) = ${dateStr}`
+      ))
+      .orderBy(desc(orders.created_at));
+
+    if (historyOrders.length === 0) return res.json([]);
+
+    // Fetch files
+    const orderIds = historyOrders.map(o => o.id);
+    const files = await db.select().from(order_files).where(inArray(order_files.order_id, orderIds));
+
+    const result = historyOrders.map(order => ({
+      ...order,
+      files: files.filter(f => f.order_id === order.id).map(f => ({
+        filename: f.file_url.split('/').pop(),
+        pages: f.pages,
+        copies: f.copies,
+        color: f.color
+      }))
+    }));
+
+    res.json(result);
+
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getUserActiveOrder = async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.query.user_id);
+    if (!userId) return res.status(400).json({ error: "User ID required" });
+
+    const [activeOrder] = await db.select({
+        id: orders.id,
+        status: orders.status,
+        shop_id: orders.shop_id,
+        total_amount: orders.total_amount,
+        created_at: orders.created_at,
+        shop_name: shops.name
+      })
+      .from(orders)
+      .leftJoin(shops, eq(orders.shop_id, shops.id))
+      .where(and(
+        eq(orders.user_id, userId),
+        inArray(orders.status, ["QUEUED", "PRINTING"])
+      ))
+      .orderBy(desc(orders.created_at))
+      .limit(1);
+
+    if (!activeOrder) return res.json(null);
+
+    const [queueResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(and(
+        eq(orders.shop_id, activeOrder.shop_id),
+        inArray(orders.status, ["QUEUED", "PRINTING"]),
+        lt(orders.id, activeOrder.id)
+      ));
+
+
+    const files = await db.select().from(order_files).where(eq(order_files.order_id, activeOrder.id));
+    const totalFiles = files.length;
+    const isColor = files.some(f => f.color);
+
+    res.json({
+      id: activeOrder.id,
+      status: activeOrder.status,
+      shop_name: activeOrder.shop_name,
+      queue_position: Number(queueResult.count) + 1,
+      file_count: totalFiles,
+      has_color: isColor,
+      total_amount: activeOrder.total_amount,
+      created_at: activeOrder.created_at
+    });
+
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 };
