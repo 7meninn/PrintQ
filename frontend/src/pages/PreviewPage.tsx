@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useOrder, LocalFileItem } from "../context/OrderContext";
+import { LocalFileItem } from "../context/OrderContext";
 import { PDFDocument } from "pdf-lib";
 import { 
   ArrowLeft, Store, FileText, Receipt, CheckCircle2, Printer, 
@@ -30,7 +30,6 @@ export default function PreviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { resetOrder } = useOrder();
   
   const [isCalculating, setIsCalculating] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -179,7 +178,7 @@ export default function PreviewPage() {
          }
       }
 
-      setStatusMessage("Opening Payment Gateway...");
+      setStatusMessage("Redirecting to PhonePe...");
       const paymentRes = await fetch("http://localhost:3000/orders/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -190,38 +189,15 @@ export default function PreviewPage() {
       });
       const paymentData = await paymentRes.json();
 
-      const options = {
-        key: paymentData.key_id,
-        amount: paymentData.amount,
-        currency: "INR",
-        name: "PrintQ",
-        description: `Order #${orderDraft.order_id}`,
-        order_id: paymentData.razorpay_order_id,
-        handler: async function (response: any) {
-           setStatusMessage("Confirming Order...");
-           await finalizeOrder(orderDraft.order_id, response);
-        },
-        prefill: { name: user?.name, email: user?.email },
-        theme: { color: "#2563eb" },
-        modal: { 
-            ondismiss: async function() {
-                setIsSubmitting(false);
-                setStatusMessage("Payment Cancelled");
-                try {
-                    await fetch("http://localhost:3000/orders/cancel", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ order_id: orderDraft.order_id })
-                    });
-                } catch (e) {
-                    console.error("Failed to cancel order", e);
-                }
-            }
-        }
-      };
-
-      const rzp = new (window as any).Razorpay(options);
-      rzp.open();
+      if (paymentData.success && paymentData.url) {
+         // --- REDIRECT TO PHONEPE ---
+         // The user leaves our site here.
+         // Success -> /success
+         // Fail -> /upload?error=payment_failed
+         window.location.href = paymentData.url;
+      } else {
+         throw new Error("Payment gateway initiation failed.");
+      }
 
     } catch (error: any) {
       console.error(error);
@@ -231,40 +207,6 @@ export default function PreviewPage() {
       setIsSubmitting(false);
       setStatusMessage("");
     }
-  };
-
-  const finalizeOrder = async (orderId: number, paymentData: any) => {
-      try {
-        const payload = {
-            order_id: orderId,
-            user_id: user?.id,
-            razorpay_payment_id: paymentData.razorpay_payment_id,
-            razorpay_signature: paymentData.razorpay_signature
-        };
-
-        const res = await fetch("http://localhost:3000/orders/confirm", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-            resetOrder(); 
-            navigate("/success", { 
-                state: { 
-                    order_id: orderId, 
-                    total_amount: summary.total_amount, 
-                    shop_name: state.shop_name, 
-                    file_count: processedFiles.length
-                } 
-            });
-        } else {
-            throw new Error("Verification Failed");
-        }
-      } catch (e) {
-          alert("Payment verified but order update failed. Contact support.");
-          navigate("/upload");
-      }
   };
 
   if (!state) return null;
@@ -391,7 +333,7 @@ export default function PreviewPage() {
                 <div className="mt-8 pt-4 border-t border-gray-700">
                     <div className="flex justify-between items-end mb-6"><p className="text-xs text-gray-400 font-medium">Total Amount Payable</p><p className="text-3xl font-bold text-white tracking-tight">₹{summary.total_amount}</p></div>
                     <button onClick={handlePay} disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : <>Pay with Razorpay <CheckCircle2 size={20} /></>}
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : <>Pay with PhonePe <CheckCircle2 size={20} /></>}
                     </button>
                     {statusMessage && <p className="text-xs text-center text-blue-300 mt-3 animate-pulse">{statusMessage}</p>}
                 </div>

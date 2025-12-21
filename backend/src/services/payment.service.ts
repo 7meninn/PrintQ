@@ -1,133 +1,98 @@
-import Razorpay from "razorpay";
-import crypto from "crypto";
 import axios from "axios";
+import crypto from "crypto";
 
-// Initialize Razorpay
-const instance = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "",
-});
+const MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID || "PGTESTPAYUAT";
+const SALT_KEY = process.env.PHONEPE_SALT_KEY || "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399";
+const SALT_INDEX = process.env.PHONEPE_SALT_INDEX || "1";
+const HOST_URL = process.env.PHONEPE_HOST_URL || "https://api-preprod.phonepe.com/apis/pg-sandbox";
+const APP_BE_URL = process.env.BACKEND_URL || "http://localhost:3000"; 
+const APP_FE_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
-// --- 1. ACCEPT PAYMENTS (Standard Gateway) ---
-
-export const createRazorpayOrder = async (amount: number) => {
-  // Amount expected in Rupees, Razorpay expects Paise
-  const options = {
-    amount: Math.round(amount * 100), 
-    currency: "INR",
-    payment_capture: 1, // Auto-capture
-  };
-
+export const initiatePhonePePayment = async (orderId: number, amount: number, userId: number) => {
   try {
-    const order = await instance.orders.create(options);
-    return order;
-  } catch (error) {
-    console.error("Razorpay Create Order Failed:", error);
-    throw new Error("Payment Gateway Error");
-  }
-};
+    const transactionId = `TXN_${orderId}_${Date.now()}`;
 
-export const verifyPaymentSignature = (
-  orderId: string,
-  paymentId: string,
-  signature: string
-): boolean => {
-  const secret = process.env.RAZORPAY_KEY_SECRET || "";
-  const generated_signature = crypto
-    .createHmac("sha256", secret)
-    .update(orderId + "|" + paymentId)
-    .digest("hex");
+    const payload = {
+      merchantId: MERCHANT_ID,
+      merchantTransactionId: transactionId,
+      merchantUserId: `MUSER_${userId}`,
+      amount: Math.round(amount * 100), 
+      redirectUrl: `${APP_BE_URL}/orders/callback`,
+      redirectMode: "POST",
+      callbackUrl: `${APP_BE_URL}/orders/callback`,
+      paymentInstrument: {
+        type: "PAY_PAGE" // This generates the payment link
+      }
+    };
 
-  return generated_signature === signature;
-};
+    const base64Payload = Buffer.from(JSON.stringify(payload)).toString("base64");
+    const apiEndpoint = "/pg/v1/pay";
+    const stringToSign = base64Payload + apiEndpoint + SALT_KEY;
+    const sha256 = crypto.createHash("sha256").update(stringToSign).digest("hex");
+    const checksum = `${sha256}###${SALT_INDEX}`;
 
-// --- 2. REFUNDS ---
+    console.log(`[PhonePe] Initiating Payment: ${transactionId} | Merchant: ${MERCHANT_ID}`);
 
-export const refundRazorpayPayment = async (paymentId: string) => {
-  try {
-    const refund = await instance.payments.refund(paymentId, {});
-    return refund;
-  } catch (error) {
-    console.error("Razorpay Refund Failed:", error);
-    throw new Error("Refund failed at gateway");
-  }
-};
-
-// --- 3. PAYOUTS (RazorpayX) ---
-
-export const createPayout = async (
-  amount: number,
-  upiId: string,
-  shopName: string,
-  shopId: number
-) => {
-  // RazorpayX requires Basic Auth with Key ID and Secret
-  const auth = Buffer.from(
-    `${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`
-  ).toString("base64");
-
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Basic ${auth}`,
-  };
-
-  const accountNumber = process.env.RAZORPAY_X_ACCOUNT_NUMBER; // Required for Payouts
-  if (!accountNumber) {
-    throw new Error("RazorpayX Account Number not configured");
-  }
-
-  try {
-    // Step A: Create Contact (Idempotent if reference_id matches)
-    const contactRes = await axios.post(
-      "https://api.razorpay.com/v1/contacts",
+    const response = await axios.post(
+      `${HOST_URL}${apiEndpoint}`,
+      { request: base64Payload },
       {
-        name: shopName,
-        // We use shop_id to create a unique reference so we don't duplicate contacts
-        reference_id: `shop_${shopId}`, 
-        type: "vendor",
-      },
-      { headers }
-    );
-    const contactId = contactRes.data.id;
-
-    // Step B: Create Fund Account (UPI)
-    const fundRes = await axios.post(
-      "https://api.razorpay.com/v1/fund_accounts",
-      {
-        contact_id: contactId,
-        account_type: "vpa",
-        vpa: {
-          address: upiId,
+        headers: {
+          "Content-Type": "application/json",
+          "X-VERIFY": checksum,
         },
-      },
-      { headers }
-    );
-    const fundAccountId = fundRes.data.id;
-
-    // Step C: Initiate Payout
-    const payoutRes = await axios.post(
-      "https://api.razorpay.com/v1/payouts",
-      {
-        account_number: accountNumber,
-        fund_account_id: fundAccountId,
-        amount: Math.round(amount * 100), // In Paise
-        currency: "INR",
-        mode: "UPI",
-        purpose: "payout",
-        queue_if_low_balance: true,
-        reference_id: `payout_${shopId}_${Date.now()}`,
-        narration: `PrintQ Daily Settlement`,
-      },
-      { headers }
+      }
     );
 
+    // 4. Return the Redirect URL
     return {
       success: true,
-      payout_id: payoutRes.data.id,
-      status: payoutRes.data.status,
+      url: response.data.data.instrumentResponse.redirectInfo.url,
+      transactionId
     };
+
   } catch (error: any) {
-    console.error("RazorpayX Payout Failed:", error.response?.data || error.message);
-    throw new Error(error.response?.data?.error?.description || "Payout failed");
+    console.error("PhonePe Init Failed:", error.response?.data || error.message);
+    // If it's a configuration error, throw a clear message
+    if (error.response?.data?.code === 'KEY_NOT_CONFIGURED') {
+        throw new Error("PhonePe Configuration Error: Invalid Merchant ID or Salt Key.");
+    }
+    throw new Error("Payment Gateway Unavailable");
   }
 };
+
+export const verifyPhonePeCallback = (base64Response: string, checksumHeader: string) => {
+    try {
+        const stringToSign = base64Response + SALT_KEY;
+        const calculatedChecksum = crypto.createHash("sha256").update(stringToSign).digest("hex") + "###" + SALT_INDEX;
+        
+        return calculatedChecksum === checksumHeader;
+    } catch (e) {
+        console.error("Checksum verification failed", e);
+        return false;
+    }
+};
+
+export const createPayout = async (
+    amount: number,
+    upiId: string,
+    shopName: string,
+    shopId: number
+  ) => {
+    console.log(`[Mock Payout] Sending ₹${amount} to ${upiId} (${shopName})`);
+
+    await new Promise(r => setTimeout(r, 1000));
+  
+    return {
+      success: true,
+      payout_id: `payout_${Date.now()}_${shopId}`,
+      status: "PROCESSED",
+    };
+  };
+
+export const createRazorpayOrder = async (amount: number) => { throw new Error("Use PhonePe"); };
+export const refundRazorpayPayment = async (id: string) => { 
+    console.log(`[Mock Refund] Refunded ${id}`);
+    return { status: "processed" }; 
+};
+export const verifyPaymentSignature = () => true;

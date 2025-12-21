@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext"; 
 import { useOrder } from "../context/OrderContext"; 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
@@ -20,6 +20,7 @@ interface Shop {
 
 export default function UploadPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, isLoading: isAuthLoading, logout } = useAuth();
 
   const { 
@@ -91,6 +92,17 @@ export default function UploadPage() {
     }
   }, [needsColor, needsBW, shops, availableShops, selectedShopId, setSelectedShopId]);
 
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (error === "payment_failed") {
+        alert("Payment was cancelled or failed. Please upload your files again.");
+        // Clean URL without reloading page
+        navigate("/upload", { replace: true });
+    } else if (error === "server_error") {
+        alert("A server error occurred during payment. Please try again.");
+        navigate("/upload", { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   // --- File Handlers ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

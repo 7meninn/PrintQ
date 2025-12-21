@@ -2,32 +2,47 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import multer from "multer";
 import { startStationMonitorJob } from "./cron/station_monitor";
-import { startPayoutJob } from "./cron/payouts"; // <--- IMPORT THIS
-
 import { login, initiateSignup, completeSignup, forgotPassword, resetPassword } from "./controllers/auth.controller";
 import { getShops } from "./controllers/shops.controller";
 import { 
-  prepareOrder, initiatePayment, confirmOrder, cancelOrder,
-  getUserHistory, getUserActiveOrder
+  prepareOrder, 
+  initiatePayment, 
+  handlePaymentCallback,
+  cancelOrder,
+  getUserHistory,      
+  getUserActiveOrder   
 } from "./controllers/orders.controller";
 import { 
   shopLogin, getPendingJobs, completeJob, shopHeartbeat, failJob,
   createShop, deleteShop, getShopHistory
 } from "./controllers/shop_client.controller";
 
+import { 
+  getAdminStats, getAllOrders, refundOrder, failOrder, 
+  getAllShops, getPayouts, markPayoutAsPaid 
+} from "./controllers/admin.controller";
+
 import { startCleanupJob } from "./cron/cleanup";
 import { startRefundJob } from "./cron/refund";
-import { failOrder, getAdminStats, getAllOrders, getAllShops, getPayouts, markPayoutAsPaid, refundOrder } from "./controllers/admin.controller";
+import { startAutoCompleteJob } from "./cron/auto_complete";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true, limit: '50mb' })); 
+
 const storage = multer.memoryStorage(); 
 
 const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedMimeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+  const allowedMimeTypes = [
+    'application/pdf', 
+    'image/png', 
+    'image/jpeg', 
+    'image/jpg'
+  ];
+
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -38,10 +53,10 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
 const upload = multer({ 
   storage,
   fileFilter,
-  limits: { fileSize: 60 * 1024 * 1024 }
+  limits: { fileSize: 60 * 1024 * 1024 } 
 });
 
-// Admin Middleware
+// 🔒 ADMIN SECURITY MIDDLEWARE
 const adminAuth = (req: Request, res: Response, next: NextFunction) => {
   const apiKey = req.headers['x-admin-secret'];
   if (!apiKey || apiKey !== process.env.ADMIN_SECRET) {
@@ -50,24 +65,31 @@ const adminAuth = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
+// --- ADMIN ROUTES ---
 app.post("/admin/shops/create", adminAuth, createShop);
 app.post("/admin/shops/delete", adminAuth, deleteShop);
-app.post("/admin/payouts/mark-paid", adminAuth, markPayoutAsPaid);
 app.get("/admin/stats", adminAuth, getAdminStats);
 app.get("/admin/orders", adminAuth, getAllOrders);
 app.post("/admin/orders/refund", adminAuth, refundOrder);
+app.post("/admin/orders/fail", adminAuth, failOrder);
 app.get("/admin/shops", adminAuth, getAllShops);
 app.get("/admin/payouts", adminAuth, getPayouts);
-app.post("/admin/orders/fail", adminAuth, failOrder);
+app.post("/admin/payouts/mark-paid", adminAuth, markPayoutAsPaid);
+
+// --- AUTH ROUTES ---
 app.post("/auth/login", login);
 app.post("/auth/signup/initiate", initiateSignup);
 app.post("/auth/signup/complete", completeSignup);
 app.post("/auth/forgot-password", forgotPassword);
 app.post("/auth/reset-password", resetPassword);
+
+// --- SHOP DISCOVERY ---
 app.get("/shops", getShops);
 
+// --- ORDER ROUTES ---
 const handleUpload = (req: Request, res: Response, next: NextFunction) => {
   const uploadMiddleware = upload.array("files");
+  
   uploadMiddleware(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ error: `Upload error: ${err.message}` });
@@ -78,22 +100,30 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
     if (req.files) {
       const files = req.files as Express.Multer.File[];
       const totalSize = files.reduce((acc, file) => acc + file.size, 0);
-      if (totalSize > 60 * 1024 * 1024) {
-        return res.status(400).json({ error: `Total upload size exceeds 60MB limit.` });
+      const MAX_TOTAL_SIZE = 60 * 1024 * 1024;
+
+      if (totalSize > MAX_TOTAL_SIZE) {
+        return res.status(400).json({ 
+          error: `Total upload size exceeds 60MB limit.` 
+        });
       }
     }
+
     next();
   });
 };
 
 app.post("/orders/preview", handleUpload, prepareOrder);
 app.post("/orders/initiate", initiatePayment);
-app.post("/orders/confirm", confirmOrder);
+// ✅ PhonePe Callback (Replaces confirmOrder)
+app.post("/orders/callback", handlePaymentCallback); 
 app.post("/orders/cancel", cancelOrder);
 
+// --- USER HISTORY ROUTES ---
 app.get("/user/history", getUserHistory);
 app.get("/user/active", getUserActiveOrder);
 
+// --- SHOP/PRINTER APP API ---
 app.post("/shop/login", shopLogin);
 app.post("/shop/heartbeat", shopHeartbeat);
 app.get("/shop/orders", getPendingJobs);
@@ -105,7 +135,7 @@ app.post("/shop/fail", failJob);
 startCleanupJob();
 startRefundJob();
 startStationMonitorJob();
-startPayoutJob(); // <--- START THE JOB
+startAutoCompleteJob();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -1,12 +1,13 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
-import { orders, order_files, shops, users } from "../db/schema";
-import { eq } from "drizzle-orm";
-import { PDFDocument } from "pdf-lib";
-import { sendOrderPlacedEmail } from "../services/email.service";
-import { createRazorpayOrder, verifyPaymentSignature } from "../services/payment.service";
+import { orders, order_files, shops, users } from "../db/schema"; // Ensure users is imported
+import { eq, and, inArray, sql, lt, desc } from "drizzle-orm";
 import { uploadFileToAzure } from "../services/storage.service";
-import { and, inArray, sql, lt, desc } from "drizzle-orm";
+import { PDFDocument } from "pdf-lib";
+import { sendOrderPlacedEmail } from "../services/email.service"; // ✅ Import email service
+
+// NOTE: PhonePe service imported but NOT used for Verification Mode
+// import { initiatePhonePePayment } from "../services/payment.service";
 
 interface MulterFile {
   buffer: Buffer;
@@ -19,6 +20,7 @@ interface FileConfig {
   copies: number;
 }
 
+// 1. PREPARE ORDER (Upload & Draft) - KEEP AS IS
 export const prepareOrder = async (req: Request, res: Response) => {
   try {
     const files = req.files as unknown as MulterFile[];
@@ -35,6 +37,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
     const shop = await db.query.shops.findFirst({ where: eq(shops.id, shopId) });
     if (!shop) return res.status(404).json({ error: "Selected shop not found" });
 
+    // ✅ UPDATED PRICING
     const BW_PRICE = 2;
     const COLOR_PRICE = 12;
     const SERVICE_CHARGE_PERCENTAGE = 0.25;
@@ -52,6 +55,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
 
     const processedFiles = [];
 
+    // 1. Process Files
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       let conf = configs[i] || { color: false, copies: 1 };
@@ -66,7 +70,10 @@ export const prepareOrder = async (req: Request, res: Response) => {
         console.error(`Error counting pages:`, err);
       }
 
+      // Upload
       const azureUrl = await uploadFileToAzure(file.buffer, file.originalname);
+
+      // Calc Cost
       const calculatedPages = detectedPages * conf.copies;
       const pricePerSheet = conf.color ? COLOR_PRICE : BW_PRICE;
       const fileCost = calculatedPages * pricePerSheet;
@@ -90,13 +97,13 @@ export const prepareOrder = async (req: Request, res: Response) => {
       });
     }
 
-
+    // 2. Totals
     summary.print_cost = summary.bw_cost + summary.color_cost;
     const rawServiceCharge = summary.print_cost * SERVICE_CHARGE_PERCENTAGE;
     summary.service_charge = Math.ceil(Math.min(rawServiceCharge, MAX_SERVICE_CHARGE));
     summary.total_amount = summary.print_cost + summary.service_charge;
 
-
+    // 3. Create Draft Order
     const [draftOrder] = await db.insert(orders).values({
         user_id: userId,
         shop_id: shopId,
@@ -104,7 +111,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
         status: "DRAFT",
     } as any).returning();
 
-
+    // 4. Link Files
     for (const f of processedFiles) {
         await db.insert(order_files).values({
             order_id: draftOrder.id,
@@ -129,43 +136,56 @@ export const prepareOrder = async (req: Request, res: Response) => {
   }
 };
 
+// 2. INITIATE PAYMENT (VERIFICATION MODE: MOCK SUCCESS)
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
-    const { order_id } = req.body; 
+    const { order_id, user_id } = req.body;
 
-    if (!order_id || isNaN(Number(order_id))) {
-        return res.status(400).json({ error: "Invalid Order ID" });
-    }
-
-    const order = await db.query.orders.findFirst({
-        where: eq(orders.id, Number(order_id))
-    });
-
+    const order = await db.query.orders.findFirst({ where: eq(orders.id, Number(order_id)) });
     if (!order) return res.status(404).json({ error: "Order not found" });
 
+    // --- MOCK PAYMENT LOGIC START ---
+    console.log(`[Mock Payment] Bypassing Gateway for Verification. Order #${order.id}`);
 
-    const amount = Number(order.total_amount);
-    
+    // 1. Create a fake Transaction ID
+    const mockTxnId = `MOCK_${Date.now()}_${order.id}`;
 
-    const rzOrder = await createRazorpayOrder(amount);
-    
+    // 2. Immediately mark order as QUEUED (Paid)
     await db.update(orders)
-        .set({ razorpay_order_id: rzOrder.id })
-        .where(eq(orders.id, order.id));
-    
-    res.json({ 
-      success: true, 
-      razorpay_order_id: rzOrder.id, 
-      amount: rzOrder.amount,
-      key_id: process.env.RAZORPAY_KEY_ID 
-    });
+       .set({ 
+           status: "QUEUED", 
+           razorpay_payment_id: mockTxnId 
+       }) 
+       .where(eq(orders.id, order.id));
+
+    // 3. ✅ SEND CONFIRMATION EMAIL (Crucial for Verification)
+    const user = await db.query.users.findFirst({ where: eq(users.id, Number(user_id)) });
+    if (user) {
+        // Send email in background (no await) so UI is snappy
+        sendOrderPlacedEmail(user.email, order.id, String(order.total_amount))
+            .then(() => console.log(`📧 Sent Mock Success Email to ${user.email}`))
+            .catch(e => console.error("❌ Email Failed:", e));
+    }
+
+    // 4. Return the Frontend Success URL directly
+    const successUrl = `${process.env.FRONTEND_URL}/success?order_id=${order.id}`;
+
+    res.json({ success: true, url: successUrl });
+    // --- MOCK PAYMENT LOGIC END ---
 
   } catch (err: any) {
     console.error("Payment Init Error:", err);
-    res.status(500).json({ error: "Could not initiate payment" });
+    res.status(500).json({ error: "Mock Payment Failed" });
   }
 };
 
+// 3. PAYMENT CALLBACK (Not used in Mock Mode, but kept for future)
+export const handlePaymentCallback = async (req: Request, res: Response) => {
+    // This won't be called in the mock flow
+    res.redirect(`${process.env.FRONTEND_URL}/upload`);
+};
+
+// 4. CANCEL ORDER (Manual)
 export const cancelOrder = async (req: Request, res: Response) => {
     try {
         const { order_id } = req.body;
@@ -175,59 +195,17 @@ export const cancelOrder = async (req: Request, res: Response) => {
             .set({ status: "CANCELLED" })
             .where(eq(orders.id, order_id));
 
-        console.log(`Order #${order_id} cancelled by user.`);
         res.json({ success: true });
     } catch (err: any) {
-        console.error("Cancel Order Error:", err);
         res.status(500).json({ error: err.message });
     }
 };
 
-export const confirmOrder = async (req: Request, res: Response) => {
-  try {
-    const { 
-      order_id, 
-      razorpay_payment_id, 
-      razorpay_signature 
-    } = req.body;
-
-    const order = await db.query.orders.findFirst({ where: eq(orders.id, order_id) });
-    if (!order || !order.razorpay_order_id) {
-        return res.status(400).json({ error: "Invalid order state" });
-    }
-
-    const isValid = verifyPaymentSignature(
-        order.razorpay_order_id, 
-        razorpay_payment_id, 
-        razorpay_signature
-    );
-
-    if (!isValid) {
-        return res.status(400).json({ error: "Payment verification failed." });
-    }
-
-    await db.update(orders).set({
-        status: "QUEUED",
-        razorpay_payment_id: razorpay_payment_id
-    }).where(eq(orders.id, order_id));
-
-    const user = await db.query.users.findFirst({ where: eq(users.id, order.user_id) });
-    if (user) {
-        sendOrderPlacedEmail(user.email, order.id, String(order.total_amount));
-    }
-
-    res.json({ success: true, order_id: order.id });
-
-  } catch (err: any) {
-    console.error("Confirm Order Error:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
-
+// 5. GET USER HISTORY
 export const getUserHistory = async (req: Request, res: Response) => {
   try {
     const userId = Number(req.query.user_id);
-    const dateStr = req.query.date as string;
+    const dateStr = req.query.date as string; 
 
     if (!userId || !dateStr) {
       return res.status(400).json({ error: "User ID and Date required" });
@@ -245,14 +223,13 @@ export const getUserHistory = async (req: Request, res: Response) => {
       .leftJoin(shops, eq(orders.shop_id, shops.id))
       .where(and(
         eq(orders.user_id, userId),
-        inArray(orders.status, ["COMPLETED", "FAILED", "REFUNDED"]),
+        inArray(orders.status, ["COMPLETED", "FAILED", "REFUNDED", "CANCELLED"]),
         sql`DATE(${orders.created_at}) = ${dateStr}`
       ))
       .orderBy(desc(orders.created_at));
 
     if (historyOrders.length === 0) return res.json([]);
 
-    // Fetch files
     const orderIds = historyOrders.map(o => o.id);
     const files = await db.select().from(order_files).where(inArray(order_files.order_id, orderIds));
 
@@ -273,6 +250,7 @@ export const getUserHistory = async (req: Request, res: Response) => {
   }
 };
 
+// 6. GET ACTIVE ORDER
 export const getUserActiveOrder = async (req: Request, res: Response) => {
   try {
     const userId = Number(req.query.user_id);
@@ -305,7 +283,6 @@ export const getUserActiveOrder = async (req: Request, res: Response) => {
         lt(orders.id, activeOrder.id)
       ));
 
-
     const files = await db.select().from(order_files).where(eq(order_files.order_id, activeOrder.id));
     const totalFiles = files.length;
     const isColor = files.some(f => f.color);
@@ -314,7 +291,7 @@ export const getUserActiveOrder = async (req: Request, res: Response) => {
       id: activeOrder.id,
       status: activeOrder.status,
       shop_name: activeOrder.shop_name,
-      queue_position: Number(queueResult.count) + 1,
+      queue_position: Number(queueResult.count) + 1, 
       file_count: totalFiles,
       has_color: isColor,
       total_amount: activeOrder.total_amount,
@@ -326,4 +303,4 @@ export const getUserActiveOrder = async (req: Request, res: Response) => {
   }
 };
 
-export const createOrder = async (req: Request, res: Response) => { res.status(410).json({error: "Deprecated"}); };
+export const confirmOrder = async (req: Request, res: Response) => { res.status(410).json({error: "Deprecated in Mock Mode"}); };
