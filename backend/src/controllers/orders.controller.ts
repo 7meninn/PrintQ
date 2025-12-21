@@ -168,7 +168,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
     }
 
     // 4. Return the Frontend Success URL directly
-    const successUrl = `/success?order_id=${order.id}`;
+    const successUrl = `${process.env.FRONTEND_URL}/success?order_id=${order.id}`;
 
     res.json({ success: true, url: successUrl });
     // --- MOCK PAYMENT LOGIC END ---
