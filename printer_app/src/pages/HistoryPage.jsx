@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStation } from "../context/StationContext";
+import { API_BASE_URL } from "../config";
 import { 
   ArrowLeft, Calendar, FileText, 
   CheckCircle2, XCircle, Printer, ChevronLeft, ChevronRight, Loader2,
@@ -38,7 +39,7 @@ export default function HistoryPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:3000/shop/history?shop_id=${station.id}&date=${selectedDate}`);
+        const res = await fetch(`${API_BASE_URL}/shop/history?shop_id=${station.id}&date=${selectedDate}`);
         if (res.ok) {
           const json = await res.json();
           setData(json);

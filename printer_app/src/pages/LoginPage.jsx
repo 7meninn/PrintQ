@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStation } from "../context/StationContext";
+import { API_BASE_URL } from "../config";
 import { 
   Printer, Lock, Hash, AlertCircle, Loader2, 
   CheckCircle, ArrowRight
@@ -20,16 +21,7 @@ export default function LoginPage() {
     setError("");
     setIsSubmitting(true);
 
-    // DEBUG: Use this to log in immediately without backend if needed
-    if (stationId === "1" && password === "admin") {
-       login({ id: 1, name: "Station 01 (Dev)", token: "dev-token" });
-       navigate("/dashboard");
-       return;
-    }
-
     try {
-      // Trying the most likely correct endpoint based on your Auth pattern
-      // Sending default printer status as false initially
       const payload = { 
         id: Number(stationId), // Changed from shop_id to id based on your controller code
         password: password,
@@ -39,7 +31,7 @@ export default function LoginPage() {
 
       console.log("Sending Login Payload:", payload);
 
-      const res = await fetch("http://localhost:3000/shop/login", {
+      const res = await fetch(`${API_BASE_URL}/shop/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

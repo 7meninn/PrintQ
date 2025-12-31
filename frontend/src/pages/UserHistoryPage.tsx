@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../config";
 import { 
   ArrowLeft, Clock, MapPin, FileText, 
   CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, Zap
@@ -68,7 +69,7 @@ export default function UserHistoryPage() {
 
     const fetchActive = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/user/active?user_id=${user.id}`);
+        const res = await fetch(`${API_BASE_URL}/user/active?user_id=${user.id}`);
         if (res.ok) {
           const data: ActiveOrder | null = await res.json();
           
@@ -104,7 +105,7 @@ export default function UserHistoryPage() {
     const fetchHistory = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`http://localhost:3000/user/history?user_id=${user.id}&date=${selectedDate}`);
+        const res = await fetch(`${API_BASE_URL}/user/history?user_id=${user.id}&date=${selectedDate}`);
         if (res.ok) {
           const data = await res.json();
           setHistory(data);

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import { API_BASE_URL } from "../config";
 
 const StationContext = createContext();
 
@@ -50,7 +51,7 @@ export function StationProvider({ children }) {
 
       try {
         // Send heartbeat to server
-        await fetch("http://localhost:3000/shop/heartbeat", {
+        await fetch(`${API_BASE_URL}/shop/heartbeat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
@@ -84,7 +85,7 @@ export function StationProvider({ children }) {
   const logout = () => {
     // Send one final "Offline" signal
     if (station?.id) {
-        fetch("http://localhost:3000/shop/heartbeat", {
+        fetch(`${API_BASE_URL}/shop/heartbeat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: station.id, has_bw: false, has_color: false })

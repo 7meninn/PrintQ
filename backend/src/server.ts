@@ -3,6 +3,7 @@ import cors from "cors";
 import multer from "multer";
 import { startStationMonitorJob } from "./cron/station_monitor";
 import { startPayoutJob } from "./cron/payouts"; // <--- IMPORT THIS
+import { startGhostStationJob } from "./cron/ghost_station";
 
 import { login, initiateSignup, completeSignup, forgotPassword, resetPassword } from "./controllers/auth.controller";
 import { getShops } from "./controllers/shops.controller";
@@ -106,6 +107,7 @@ startCleanupJob();
 startRefundJob();
 startStationMonitorJob();
 startPayoutJob(); // <--- START THE JOB
+startGhostStationJob();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

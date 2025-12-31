@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
+import { API_BASE_URL } from "../config";
 import { TrendingUp, Users, ShoppingCart, Printer, Activity, AlertCircle } from "lucide-react";
 
 export default function Dashboard() {
@@ -7,7 +8,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-    fetch("http://localhost:3000/admin/stats", {
+    fetch(`${API_BASE_URL}/admin/stats`, {
       headers: { "x-admin-secret": adminToken }
     })
     .then(res => res.json())

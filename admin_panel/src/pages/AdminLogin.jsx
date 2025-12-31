@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
+import { API_BASE_URL } from "../config";
 import { Shield, Lock, Loader2, Server, Activity, Key, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -16,7 +17,7 @@ export default function AdminLogin() {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:3000/admin/stats", {
+      const res = await fetch(`${API_BASE_URL}/admin/stats`, {
         headers: { "x-admin-secret": secret }
       });
       

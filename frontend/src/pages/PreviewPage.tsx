@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useOrder, LocalFileItem } from "../context/OrderContext";
+import { API_BASE_URL } from "../config";
 import { PDFDocument } from "pdf-lib";
 import { 
   ArrowLeft, Store, FileText, Receipt, CheckCircle2, Printer, 
@@ -158,7 +159,7 @@ export default function PreviewPage() {
       formData.append('shop_id', String(state.shop_id));
       if(user?.id) formData.append('user_id', String(user.id));
 
-      const initRes = await fetch("http://localhost:3000/orders/preview", {
+      const initRes = await fetch(`${API_BASE_URL}/orders/preview`, {
         method: "POST",
         body: formData
       });
@@ -180,7 +181,7 @@ export default function PreviewPage() {
       }
 
       setStatusMessage("Opening Payment Gateway...");
-      const paymentRes = await fetch("http://localhost:3000/orders/initiate", {
+      const paymentRes = await fetch(`${API_BASE_URL}/orders/initiate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
@@ -208,7 +209,7 @@ export default function PreviewPage() {
                 setIsSubmitting(false);
                 setStatusMessage("Payment Cancelled");
                 try {
-                    await fetch("http://localhost:3000/orders/cancel", {
+                    await fetch(`${API_BASE_URL}/orders/cancel`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ order_id: orderDraft.order_id })
@@ -242,7 +243,7 @@ export default function PreviewPage() {
             razorpay_signature: paymentData.razorpay_signature
         };
 
-        const res = await fetch("http://localhost:3000/orders/confirm", {
+        const res = await fetch(`${API_BASE_URL}/orders/confirm`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)

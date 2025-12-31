@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
+import { API_BASE_URL } from "../config";
 import { Plus, Store, MapPin, Trash2, Loader2, Printer, Palette, Ban, Wifi, WifiOff } from "lucide-react";
 
 export default function Shops() {
@@ -9,7 +10,7 @@ export default function Shops() {
 
   const fetchShops = () => {
     setLoading(true);
-    fetch("http://localhost:3000/admin/shops", {
+    fetch(`${API_BASE_URL}/admin/shops`, {
       headers: { "x-admin-secret": adminToken }
     })
     .then(res => res.json())
@@ -27,7 +28,7 @@ export default function Shops() {
       const upi_id = prompt("UPI ID:");
 
       try {
-        await fetch("http://localhost:3000/admin/shops/create", {
+        await fetch(`${API_BASE_URL}/admin/shops/create`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
             body: JSON.stringify({ name, location, password, upi_id })
@@ -38,7 +39,7 @@ export default function Shops() {
 
   const handleDelete = async (id) => {
       if(!confirm(`Delete Shop #${id}?`)) return;
-      await fetch("http://localhost:3000/admin/shops/delete", {
+      await fetch(`${API_BASE_URL}/admin/shops/delete`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
           body: JSON.stringify({ id })

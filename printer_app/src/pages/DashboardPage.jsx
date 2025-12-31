@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStation } from "../context/StationContext";
+import { API_BASE_URL } from "../config";
 import { 
   LogOut, PauseCircle, PlayCircle, History, 
   Search, Zap, AlertTriangle, Clock, Server, AlertOctagon, Loader2, ChevronRight,
@@ -86,7 +87,7 @@ export default function DashboardPage() {
       if (statusRef.current !== 'active' || !station?.id) return;
 
       try {
-        const res = await fetch(`http://localhost:3000/shop/orders?shop_id=${station.id}`);
+        const res = await fetch(`${API_BASE_URL}/shop/orders?shop_id=${station.id}`);
         
         // Sync Date
         const serverTimeHeader = res.headers.get('Date');
@@ -167,7 +168,7 @@ export default function DashboardPage() {
 
   const handleCompleteJob = async (orderId) => {
     try {
-      await fetch("http://localhost:3000/shop/complete", {
+      await fetch(`${API_BASE_URL}/shop/complete`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId })
       });
@@ -193,7 +194,7 @@ export default function DashboardPage() {
 
   const handleFailJob = async (orderId) => {
     try {
-      await fetch("http://localhost:3000/shop/fail", {
+      await fetch(`${API_BASE_URL}/shop/fail`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId, reason: "Operator Cancelled" })
       });
@@ -205,7 +206,7 @@ export default function DashboardPage() {
   const handleFailQueueOrder = async (orderId) => {
     if(!confirm("Reject this order?")) return;
     try {
-      await fetch("http://localhost:3000/shop/fail", {
+      await fetch(`${API_BASE_URL}/shop/fail`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId, reason: "Rejected from Queue" })
       });
@@ -217,7 +218,7 @@ export default function DashboardPage() {
     const allJobs = activeJob ? [activeJob, ...queue] : [...queue];
     for (const job of allJobs) {
         try {
-            await fetch("http://localhost:3000/shop/fail", {
+            await fetch(`${API_BASE_URL}/shop/fail`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ order_id: job.order_id, reason })
             });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
+import { API_BASE_URL } from "../config";
 import { Wallet, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -9,7 +10,7 @@ export default function Payouts() {
   const [loading, setLoading] = useState(true);
 
   const fetchPayouts = () => {
-    fetch("http://localhost:3000/admin/payouts", {
+    fetch(`${API_BASE_URL}/admin/payouts`, {
       headers: { "x-admin-secret": adminToken }
     })
     .then(res => res.json())
@@ -23,7 +24,7 @@ export default function Payouts() {
       if(!ref) return;
 
       try {
-        await fetch("http://localhost:3000/admin/payouts/mark-paid", {
+        await fetch(`${API_BASE_URL}/admin/payouts/mark-paid`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
             body: JSON.stringify({ payout_id: payout.id, transaction_ref: ref })

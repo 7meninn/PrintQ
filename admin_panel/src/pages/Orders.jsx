@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
+import { API_BASE_URL } from "../config";
 import { 
   Search, RotateCcw, Calendar, Loader2, User, MapPin, 
   Clock, Filter, AlertOctagon, ListOrdered, Hash
@@ -23,7 +24,7 @@ export default function Orders() {
     setLoading(true);
     setSearched(true);
     
-    let url = "http://localhost:3000/admin/orders?";
+    let url = `${API_BASE_URL}/admin/orders?`;
     if (searchType === "id" && orderId) {
       url += `order_id=${orderId}`;
     } else {
@@ -46,7 +47,7 @@ export default function Orders() {
     if (!reason) return;
 
     try {
-        const res = await fetch("http://localhost:3000/admin/orders/refund", {
+        const res = await fetch(`${API_BASE_URL}/admin/orders/refund`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
             body: JSON.stringify({ order_id: id, reason })
@@ -61,7 +62,7 @@ export default function Orders() {
     if (!reason) return;
 
     try {
-        const res = await fetch("http://localhost:3000/admin/orders/fail", {
+        const res = await fetch(`${API_BASE_URL}/admin/orders/fail`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
             body: JSON.stringify({ order_id: id, reason })

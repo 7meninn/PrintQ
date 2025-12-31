@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext"; 
 import { useOrder } from "../context/OrderContext"; 
+import { API_BASE_URL } from "../config";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { 
   UploadCloud, FileText, X, Minus, Plus, Store, Palette, 
@@ -46,7 +47,7 @@ export default function UploadPage() {
     const fetchShops = async (silent = false) => {
       if (!silent) setIsLoadingShops(true);
       try {
-        const res = await fetch("http://localhost:3000/shops");
+        const res = await fetch(`${API_BASE_URL}/shops`);
         if (res.ok) {
             const data: Shop[] = await res.json();
             if (isMounted) {

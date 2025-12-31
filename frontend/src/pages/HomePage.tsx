@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../config";
 import { 
   Loader2, Mail, Lock, User, 
   AlertCircle, XCircle, Key, CheckCircle, 
@@ -43,7 +44,7 @@ export default function HomePage() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:3000/auth/login", {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -71,7 +72,7 @@ export default function HomePage() {
     setError("");
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:3000/auth/signup/initiate", {
+      const res = await fetch(`${API_BASE_URL}/auth/signup/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -93,7 +94,7 @@ export default function HomePage() {
     setError("");
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:3000/auth/signup/complete", {
+      const res = await fetch(`${API_BASE_URL}/auth/signup/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password, otp }),
@@ -128,7 +129,7 @@ export default function HomePage() {
     }
 
     try {
-      const res = await fetch("http://localhost:3000/auth/forgot-password", {
+      const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
