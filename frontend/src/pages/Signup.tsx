@@ -7,7 +7,7 @@ import { useAuth } from "../context/AuthContext";
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const { login } = useAuth();
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
 
@@ -40,7 +40,7 @@ export default function Signup() {
                 name,
                 phone,
               });
-              setUser(res.data.user);
+              login(res.data.user);
               navigate("/upload");
             } catch (err: any) {
               alert(err.response?.data?.error || "Signup failed");
