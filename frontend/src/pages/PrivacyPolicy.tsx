@@ -65,7 +65,47 @@ export default function PrivacyPolicy() {
         <section className="space-y-4">
             <h2 className="text-xl font-bold text-gray-900">4. Contact Us</h2>
             <p className="text-gray-600 leading-relaxed">
-                If you have questions about your data, please contact us at <strong>privacy@printq.app</strong>.
+                If you have questions about your data, please contact us at <strong>support@printq.app</strong>.
+            </p>
+        </section>
+
+        <hr className="border-gray-200" />
+
+        {/* Razorpay Privacy Policy */}
+        <section className="space-y-4 text-gray-600 leading-relaxed">
+            <h2 className="text-xl font-bold text-gray-900">General Privacy Policy</h2>
+            <p>
+                This privacy policy sets out how AYUSH PATHANIA uses and protects any information that you give AYUSH PATHANIA when you visit their website and/or agree to purchase from them. AYUSH PATHANIA is committed to ensuring that your privacy is protected. Should we ask you to provide certain information by which you can be identified when using this website, and then you can be assured that it will only be used in accordance with this privacy statement. AYUSH PATHANIA may change this policy from time to time by updating this page. You should check this page from time to time to ensure that you adhere to these changes.
+            </p>
+            
+            <h3 className="text-lg font-bold text-gray-800 pt-4">Information We May Collect</h3>
+            <ul className="list-disc pl-5 space-y-1">
+                <li>Name</li>
+                <li>Contact information including email address</li>
+                <li>Demographic information such as postcode, preferences and interests, if required</li>
+                <li>Other information relevant to customer surveys and/or offers</li>
+            </ul>
+
+            <h3 className="text-lg font-bold text-gray-800 pt-4">What we do with the information we gather</h3>
+            <p>
+                We require this information to understand your needs and provide you with a better service, and in particular for the following reasons:
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+                <li>Internal record keeping.</li>
+                <li>We may use the information to improve our products and services.</li>
+                <li>We may periodically send promotional emails about new products, special offers or other information which we think you may find interesting using the email address which you have provided.</li>
+                <li>From time to time, we may also use your information to contact you for market research purposes. We may contact you by email, phone, fax or mail.</li>
+                <li>We may use the information to customise the website according to your interests.</li>
+            </ul>
+
+            <h3 className="text-lg font-bold text-gray-800 pt-4">Security</h3>
+            <p>
+                We are committed to ensuring that your information is secure. In order to prevent unauthorised access or disclosure we have put in suitable measures.
+            </p>
+
+            <h3 className="text-lg font-bold text-gray-800 pt-4">How we use cookies</h3>
+            <p>
+                A cookie is a small file which asks permission to be placed on your computer's hard drive. Once you agree, the file is added and the cookie helps analyze web traffic or lets you know when you visit a particular site. Cookies allow web applications to respond to you as an individual. The web application can tailor its operations to your needs, likes and dislikes by gathering and remembering information about your preferences.
             </p>
         </section>
 
