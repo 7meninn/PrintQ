@@ -27,7 +27,7 @@ export default function Footer() {
             <h3 className="font-bold text-gray-900 mb-4">Platform</h3>
             <ul className="space-y-3 text-sm text-gray-500">
               <li><Link to="/upload" className="hover:text-blue-600 transition-colors">Print Documents</Link></li>
-              <li><Link to="/contact" className="hover:text-blue-600 transition-colors">Support</Link></li>
+              <li><Link to="/contact" className="hover:text-blue-600 transition-colors">Contact Us</Link></li>
             </ul>
           </div>
 
