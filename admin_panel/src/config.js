@@ -3,7 +3,7 @@
 // =========================================================================
 
 // 1. Enter your Azure Backend URL here
-const PROD_URL = "https://REPLACE_WITH_YOUR_AZURE_BACKEND_URL.azurewebsites.net";
+const PROD_URL = "https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsites.net";
 
 // 2. Local Backend URL
 const DEV_URL = "http://localhost:3000";
