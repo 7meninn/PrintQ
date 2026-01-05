@@ -78,8 +78,34 @@ export function StationProvider({ children }) {
 
   // --- Actions ---
   
-  const login = (stationData) => {
-    setStation(stationData);
+  const login = (loginData) => {
+    const { shop, server_time } = loginData;
+    
+    // --- Daily Stats Reset Logic ---
+    try {
+      const lastLoginDate = localStorage.getItem('lastLoginDate');
+      const serverDate = new Date(server_time).toISOString().split('T')[0];
+
+      if (lastLoginDate !== serverDate) {
+        console.log(`New day detected. Old: ${lastLoginDate}, New: ${serverDate}. Resetting stats.`);
+        
+        // Clear old stat entries for this shop
+        const statsPrefix = `printq_stats_${shop.id}_`;
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith(statsPrefix)) {
+            localStorage.removeItem(key);
+            console.log(`Removed old stats key: ${key}`);
+          }
+        });
+      }
+      // Update the last login date
+      localStorage.setItem('lastLoginDate', serverDate);
+    } catch (e) {
+      console.error("Failed to process daily stats reset:", e);
+    }
+    // --- End of Logic ---
+
+    setStation(shop);
   };
 
   const logout = () => {

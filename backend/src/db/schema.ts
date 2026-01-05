@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, decimal } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, decimal, index } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -9,7 +9,9 @@ export const users = pgTable("users", {
   reset_token: text("reset_token"),
   reset_token_expires: timestamp("reset_token_expires"),
   created_at: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("users_email_idx").on(table.email)
+]);
 
 export const shops = pgTable("shops", {
   id: serial("id").primaryKey(),
@@ -17,6 +19,7 @@ export const shops = pgTable("shops", {
   location: text("location"),
   password: text("password").default("123456"),
   upi_id: text("upi_id"),
+  status: text("status").default('ACTIVE'),
   has_bw: boolean("has_bw").default(false),
   has_color: boolean("has_color").default(false),
   last_heartbeat: timestamp("last_heartbeat")
@@ -28,10 +31,16 @@ export const orders = pgTable("orders", {
   shop_id: integer("shop_id").references(() => shops.id),
   status: text("status").default("QUEUED"),
   total_amount: decimal("total_amount").notNull(),
-  razorpay_order_id: text("razorpay_order_id"),
   razorpay_payment_id: text("razorpay_payment_id"),
+  razorpay_order_id: text("razorpay_order_id"),
   created_at: timestamp("created_at").defaultNow(),
-});
+  updated_at: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()),
+}, (table) => [
+  index("orders_user_idx").on(table.user_id),
+  index("orders_shop_idx").on(table.shop_id),
+  index("orders_status_idx").on(table.status),
+  index("orders_payouts_idx").on(table.shop_id, table.status, table.created_at)
+]);
 
 export const otp_verifications = pgTable("otp_verifications", {
   id: serial("id").primaryKey(),
@@ -50,7 +59,10 @@ export const order_files = pgTable("order_files", {
   copies: integer("copies").default(1),
   color: boolean("color").default(false),
   cost: decimal("cost").notNull(),
-});
+  is_deleted_from_storage: boolean("is_deleted_from_storage").default(false).notNull(),
+}, (table) => [
+  index("order_files_order_idx").on(table.order_id)
+]);
 
 export const payouts = pgTable("payouts", {
   id: serial("id").primaryKey(),
@@ -61,4 +73,6 @@ export const payouts = pgTable("payouts", {
   color_count: integer("color_count").default(0),
   transaction_ref: text("transaction_ref"),
   created_at: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("payouts_shop_idx").on(table.shop_id)
+]);

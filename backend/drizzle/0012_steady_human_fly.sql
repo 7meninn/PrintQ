@@ -1,0 +1,1 @@
+ALTER TABLE "order_files" ADD COLUMN "is_deleted_from_storage" boolean DEFAULT false NOT NULL;

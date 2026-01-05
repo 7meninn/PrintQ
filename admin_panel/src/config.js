@@ -9,7 +9,7 @@ const PROD_URL = "https://REPLACE_WITH_YOUR_AZURE_BACKEND_URL.azurewebsites.net"
 const DEV_URL = "http://localhost:3000";
 
 // 3. Toggle this to TRUE to test the Production Backend on Localhost
-const USE_PROD_IN_DEV = false; 
+const USE_PROD_IN_DEV = true; 
 
 // =========================================================================
 

@@ -11,23 +11,28 @@ const GHOST_SHOP_NAME = "Razorpay Test Station";
  * @returns The shop object.
  */
 const ensureGhostStationExists = async () => {
-    let shop = await db.query.shops.findFirst({
-        where: eq(shops.name, GHOST_SHOP_NAME),
-    });
+    try {
+        let shop = await db.query.shops.findFirst({
+            where: eq(shops.name, GHOST_SHOP_NAME),
+        });
 
-    if (!shop) {
-        console.log(`👻 Creating ghost station: ${GHOST_SHOP_NAME}`);
-        [shop] = await db.insert(shops).values({
-            name: GHOST_SHOP_NAME,
-            location: "Virtual",
-            password: "razorpay_verification", // Set a dummy password
-            upi_id: "verification@razorpay", // Set a dummy UPI
-            has_bw: true,
-            has_color: true,
-            last_heartbeat: new Date(),
-        }).returning();
+        if (!shop) {
+            console.log(`👻 Creating ghost station: ${GHOST_SHOP_NAME}`);
+            [shop] = await db.insert(shops).values({
+                name: GHOST_SHOP_NAME,
+                location: "Virtual",
+                password: "razorpay_verification", // Set a dummy password
+                upi_id: "verification@razorpay", // Set a dummy UPI
+                has_bw: true,
+                has_color: true,
+                last_heartbeat: new Date(),
+            }).returning();
+        }
+        return shop;
+    } catch (dbError) {
+        console.error("👻 Ghost Station DB Error:", dbError.message);
+        return null;
     }
-    return shop;
 };
 
 /**

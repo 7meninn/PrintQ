@@ -28,23 +28,39 @@ export default function Shops() {
       const upi_id = prompt("UPI ID:");
 
       try {
-        await fetch(`${API_BASE_URL}/admin/shops/create`, {
+        const res = await fetch(`${API_BASE_URL}/admin/shops/create`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
             body: JSON.stringify({ name, location, password, upi_id })
         });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to add shop");
+        }
         fetchShops();
-      } catch(e) { alert("Failed"); }
+      } catch(e) { 
+        console.error(e);
+        alert(e.message);
+      }
   };
 
-  const handleDelete = async (id) => {
-      if(!confirm(`Delete Shop #${id}?`)) return;
-      await fetch(`${API_BASE_URL}/admin/shops/delete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
-          body: JSON.stringify({ id })
-      });
-      fetchShops();
+  const handleDeactivate = async (id) => {
+      if(!confirm(`Deactivate Shop #${id}? The station will no longer be able to log in.`)) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/admin/shops/delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-admin-secret": adminToken },
+            body: JSON.stringify({ id })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to deactivate shop");
+        }
+        fetchShops();
+      } catch(e) {
+        console.error(e);
+        alert(e.message);
+      }
   };
 
   return (
@@ -65,14 +81,16 @@ export default function Shops() {
        ) : (
           <div className="grid gap-4">
              {shops.map(shop => {
-                 const isOnline = shop.status === 'ONLINE';
+                 const isLive = shop.liveStatus === 'ONLINE';
+                 const isDeactivated = shop.status === 'INACTIVE';
+
                  return (
-                     <div key={shop.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                     <div key={shop.id} className={`bg-white p-5 rounded-3xl border ${isDeactivated ? 'border-red-200 bg-red-50/50' : 'border-slate-200'} shadow-sm relative overflow-hidden group transition-all`}>
                         
                         {/* Top Row: Icon + Name + Status */}
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${isOnline ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${isLive ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
                                    <Store size={24} />
                                 </div>
                                 <div>
@@ -82,15 +100,16 @@ export default function Shops() {
                             </div>
                             
                             <div className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider border ${
-                                isOnline ? 'bg-green-50 text-green-700 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
+                                isDeactivated ? 'bg-red-100 text-red-600 border-red-200' :
+                                isLive ? 'bg-green-50 text-green-700 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'
                             }`}>
-                                {isOnline ? <Wifi size={12}/> : <WifiOff size={12}/>}
-                                {shop.status}
+                                {isDeactivated ? <Ban size={12}/> : isLive ? <Wifi size={12}/> : <WifiOff size={12}/>}
+                                {isDeactivated ? 'Deactivated' : shop.liveStatus}
                             </div>
                         </div>
 
                         {/* Middle Row: Capabilities (Only if Online) */}
-                        {isOnline ? (
+                        {isLive && !isDeactivated ? (
                             <div className="flex gap-2 mb-4">
                                 {/* B/W Status */}
                                 <div className={`flex-1 p-3 rounded-xl border flex items-center gap-2 ${
@@ -102,7 +121,7 @@ export default function Shops() {
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase">B/W</p>
                                         <p className={`text-xs font-bold ${shop.has_bw ? "text-slate-900" : "text-slate-400"}`}>
-                                            {shop.has_bw ? "Ready" : "Offline"}
+                                            {shop.has_bw ? "Ready" : "Off"}
                                         </p>
                                     </div>
                                 </div>
@@ -117,33 +136,50 @@ export default function Shops() {
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase">Color</p>
                                         <p className={`text-xs font-bold ${shop.has_color ? "text-slate-900" : "text-slate-400"}`}>
-                                            {shop.has_color ? "Ready" : "Offline"}
+                                            {shop.has_color ? "Ready" : "Off"}
                                         </p>
                                     </div>
                                 </div>
                             </div>
                         ) : (
                             <div className="bg-slate-50 rounded-xl p-3 text-center mb-4 border border-slate-100">
-                                <p className="text-xs text-slate-400 font-medium">Station is currently unreachable.</p>
+                                <p className="text-xs text-slate-400 font-medium">
+                                    {isDeactivated ? 'This station has been deactivated.' : 'Station is currently unreachable.'}
+                                </p>
                             </div>
                         )}
                         
                         {/* Bottom Row: Details & Actions */}
-                        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                           <div>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">UPI ID</p>
-                              <p className="text-xs font-mono text-slate-600 bg-slate-50 px-2 py-0.5 rounded w-fit">
-                                  {shop.upi_id || "Not Configured"}
-                              </p>
+                        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 pt-3 border-t border-slate-100">
+                           <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                              <div>
+                                 <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">UPI ID</p>
+                                 <p className="text-xs font-mono text-slate-600 bg-slate-50 px-2 py-0.5 rounded w-fit">
+                                     {shop.upi_id || "Not Configured"}
+                                 </p>
+                              </div>
+                              <div className="sm:border-l sm:border-slate-200 sm:pl-4">
+                                 <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Station Login</p>
+                                 <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-xs font-mono text-slate-600 bg-slate-50 px-2 py-0.5 rounded">
+                                       ID: <span className="font-bold">{shop.id}</span>
+                                    </p>
+                                    <p className="text-xs font-mono text-slate-600 bg-slate-50 px-2 py-0.5 rounded">
+                                       PASS: <span className="font-bold">{shop.password}</span>
+                                    </p>
+                                 </div>
+                              </div>
                            </div>
                            
-                           <button 
-                             onClick={() => handleDelete(shop.id)} 
-                             className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                             title="Delete Shop"
-                           >
-                              <Trash2 size={18} />
-                           </button>
+                           {!isDeactivated && (
+                            <button 
+                                onClick={() => handleDeactivate(shop.id)}
+                                className="bg-red-50 text-red-600 text-xs font-bold px-4 py-2 rounded-lg hover:bg-red-100 transition-colors w-full md:w-auto"
+                                title="Deactivate Shop"
+                            >
+                                Deactivate
+                            </button>
+                           )}
                         </div>
 
                      </div>

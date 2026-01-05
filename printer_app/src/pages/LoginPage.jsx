@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStation } from "../context/StationContext";
 import { API_BASE_URL } from "../config";
@@ -15,6 +15,17 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const savedStationId = localStorage.getItem('stationId');
+    const savedPassword = localStorage.getItem('stationPassword');
+    if (savedStationId) {
+      setStationId(savedStationId);
+    }
+    if (savedPassword) {
+      setPassword(savedPassword);
+    }
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -59,14 +70,11 @@ export default function LoginPage() {
 
       if (!res.ok) throw new Error(data.error || "Login Failed");
 
-      // 2. Success
-      login({
-        id: data.shop.id,
-        name: data.shop.name,
-        // Backend doesn't seem to return a token in your code snippet, 
-        // but if it does, we use it. Otherwise just use ID.
-        token: data.shop.id 
-      });
+      // 2. Success - Save credentials
+      localStorage.setItem('stationId', stationId);
+      localStorage.setItem('stationPassword', password);
+
+      login(data);
 
       navigate("/dashboard");
 

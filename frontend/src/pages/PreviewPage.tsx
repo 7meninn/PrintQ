@@ -63,8 +63,7 @@ export default function PreviewPage() {
       try {
         const BW_PRICE = 2;
         const COLOR_PRICE = 12;
-        const SERVICE_CHARGE_PERCENTAGE = 0.25;
-        const MAX_SERVICE_CHARGE = 4;
+        const SERVICE_CHARGE_PERCENTAGE = 0.04; // 4%
 
         const results: ProcessedFile[] = [];
         let bwPages = 0;
@@ -76,15 +75,18 @@ export default function PreviewPage() {
             let pageCount = 1;
 
             if (item.file.type === 'application/pdf') {
-                const arrayBuffer = await item.file.arrayBuffer();
-                const pdf = await PDFDocument.load(arrayBuffer);
-                pageCount = pdf.getPageCount();
+                try {
+                    const arrayBuffer = await item.file.arrayBuffer();
+                    const pdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                    pageCount = pdf.getPageCount();
+                } catch (e) {
+                    console.error("Could not read PDF pages, defaulting to 1.", e);
+                    pageCount = 1; // Default to 1 if PDF is corrupt or unreadable
+                }
             }
 
             const totalPages = pageCount * item.copies;
             
-            // Standard Logic: Cost depends purely on item.color flag
-            // (Separator color flag is already set correctly by UploadPage)
             const price = item.color ? COLOR_PRICE : BW_PRICE;
             const fileCost = totalPages * price;
 
@@ -109,11 +111,7 @@ export default function PreviewPage() {
         }
 
         const printCost = bwCostAccumulator + colorCostAccumulator;
-        
-        // Service Charge: min(4, ceil(25% of Total))
-        const rawServiceCharge = printCost * SERVICE_CHARGE_PERCENTAGE;
-        const serviceCharge = Math.ceil(Math.min(rawServiceCharge, MAX_SERVICE_CHARGE));
-
+        const serviceCharge = Math.ceil(printCost * SERVICE_CHARGE_PERCENTAGE);
         const grandTotal = printCost + serviceCharge;
 
         setProcessedFiles(results);
@@ -363,7 +361,7 @@ export default function PreviewPage() {
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Current Rates</h4>
                 <div className="space-y-2">
-                    <div className="flex justify-between text-sm"><span className="text-gray-600 flex items-center gap-2"><Printer size={14}/> B&W Print</span><span className="font-bold text-gray-900">₹{2}.00 <span className="text-gray-400 font-normal">/ pg</span></span></div>
+                    <div className="flex justify-between text-sm"><span className="text-gray-600 flex items-center gap-2"><Printer size={14}/> B&W Print</span><span className="font-bold text-gray-900">₹2.00 <span className="text-gray-400 font-normal">/ pg</span></span></div>
                     <div className="flex justify-between text-sm"><span className="text-gray-600 flex items-center gap-2"><Palette size={14}/> Color Print</span><span className="font-bold text-gray-900">₹12.00 <span className="text-gray-400 font-normal">/ pg</span></span></div>
                 </div>
             </div>
@@ -384,7 +382,7 @@ export default function PreviewPage() {
                     <div className="h-px bg-gray-700 my-2"></div>
                     
                     <div className="flex justify-between items-center text-xs text-yellow-400">
-                        <span>Service Charge (Max ₹4)</span>
+                        <span>Service Charge</span>
                         <span>₹{summary.service_charge}</span>
                     </div>
                 </div>

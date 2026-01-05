@@ -1,22 +1,29 @@
 import cron from "node-cron";
 import { db } from "../db/connection";
 import { orders, users } from "../db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { sendRefundEmail } from "../services/email.service";
+import { refundRazorpayPayment } from "../services/payment.service";
 
 export const startRefundJob = () => {
   // Run every minute
   cron.schedule("* * * * *", async () => {
     try {
-      // 1. Find all FAILED orders
+      // 1. Find FAILED orders from the last 3 days
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
       const failedOrders = await db
         .select()
         .from(orders)
-        .where(eq(orders.status, "FAILED"));
+        .where(and(
+            eq(orders.status, "FAILED"),
+            gt(orders.created_at, threeDaysAgo)
+        ));
 
       if (failedOrders.length === 0) return;
 
-      console.log(`💸 Refund Job: Found ${failedOrders.length} failed orders.`);
+      console.log(`💸 Refund Job: Found ${failedOrders.length} failed orders (Last 3 days).`);
 
       for (const order of failedOrders) {
         // 2. Fetch User Email
@@ -26,10 +33,21 @@ export const startRefundJob = () => {
 
         if (!user) continue;
 
-        // 3. Process Refund (Mock Logic)
-        // In a real app, you would call Razorpay/Stripe API here:
-        // await paymentGateway.refund(order.payment_id);
-        console.log(`Processing Refund of ₹${order.total_amount} for Order #${order.id} to ${user.email}`);
+        // 3. Process Real Refund
+        if (order.razorpay_payment_id) {
+            try {
+                await refundRazorpayPayment(order.razorpay_payment_id);
+                console.log(`✅ Refund Successful: Order #${order.id} (Payment ID: ${order.razorpay_payment_id})`);
+            } catch (payErr) {
+                console.error(`❌ Refund Failed for Order #${order.id}:`, payErr);
+                // Continue to next order, don't update status to REFUNDED if payment refund fails
+                continue; 
+            }
+        } else {
+            console.warn(`⚠️ Skipping Refund for Order #${order.id}: No Payment ID found.`);
+            // Note: If there's no payment ID, we might still want to mark it as REFUNDED (or CANCELLED) to stop the loop.
+            // But for safety, let's mark it REFUNDED so we don't spam the log, assuming it was a free/test order.
+        }
 
         // 4. Send Email
         await sendRefundEmail(user.email, order.id, String(order.total_amount), "Printer unavailable at station.");

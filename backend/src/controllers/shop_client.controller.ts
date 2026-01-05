@@ -1,56 +1,18 @@
 import { Request, Response } from "express";
 import { db } from "../db/connection";
-import { orders, order_files, shops, users } from "../db/schema"; 
-import { eq, and, inArray } from "drizzle-orm";
+import { orders, order_files, shops, users, payouts } from "../db/schema"; 
+import { eq, and, inArray, desc } from "drizzle-orm";
 import { sendOrderReadyEmail } from "../services/email.service";
 import { sql } from "drizzle-orm";
 
-export const createShop = async (req: Request, res: Response) => {
-  try {
-    const { name, location, password, upi_id } = req.body;
 
-    if (!name || !location || !password) {
-      return res.status(400).json({ error: "Name, Location, and Password are required" });
-    }
-
-    const [newShop] = await db.insert(shops).values({
-      name,
-      location,
-      password,
-      upi_id: upi_id || null,
-      has_bw: false,
-      has_color: false
-    }).returning();
-
-    console.log(`🆕 Shop Created: ${name} (ID: ${newShop.id})`);
-    res.json({ success: true, shop: newShop });
-
-  } catch (err: any) {
-    console.error("Create Shop Error:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
-
-export const deleteShop = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ error: "Shop ID required" });
-      
-    await db.delete(shops).where(eq(shops.id, Number(id)));
-
-    console.log(`🗑️ Shop Deleted: ID ${id}`);
-    res.json({ success: true, message: `Shop #${id} deleted.` });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-};
 
 export const shopLogin = async (req: Request, res: Response) => {
   const { id, password, has_bw, has_color } = req.body;
   
   const shop = await db.query.shops.findFirst({ where: eq(shops.id, id) });
 
-  if (!shop || shop.password !== password) {
+  if (!shop || shop.password !== password || shop.status !== 'ACTIVE') {
     return res.status(401).json({ error: "Invalid Station ID or Password" });
   }
 
@@ -65,7 +27,7 @@ export const shopLogin = async (req: Request, res: Response) => {
   }
 
   const updatedShop = await db.query.shops.findFirst({ where: eq(shops.id, id) });
-  res.json({ success: true, shop: updatedShop });
+  res.json({ success: true, shop: updatedShop, server_time: new Date() });
 };
 
 // 2. Heartbeat
@@ -179,8 +141,11 @@ export const failJob = async (req: Request, res: Response) => {
         await db
           .update(orders)
           .set({ status: "FAILED" })
-          .where(eq(orders.id, order_id));
-        console.log(`Order #${order_id} marked FAILED: ${reason}`);
+          .where(and(
+            eq(orders.id, order_id),
+            inArray(orders.status, ["QUEUED", "PRINTING"])
+          ));
+        console.log(`Order #${order_id} marked FAILED by shop operator: ${reason}`);
         res.json({ success: true });
     } catch (error: any) {
         console.error("Fail Job Error:", error);
@@ -290,6 +255,30 @@ export const getShopHistory = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error("History Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getShopPayoutHistory = async (req: Request, res: Response) => {
+  try {
+    const shopId = Number(req.query.shop_id);
+    if (!shopId || isNaN(shopId)) {
+      return res.status(400).json({ error: "Invalid Shop ID" });
+    }
+
+    const history = await db.select()
+      .from(payouts)
+      .where(and(
+        eq(payouts.shop_id, shopId),
+        eq(payouts.status, 'PROCESSED')
+      ))
+      .orderBy(desc(payouts.created_at))
+      .limit(100);
+      
+    res.json(history);
+
+  } catch (error: any) {
+    console.error("Shop Payout History Error:", error);
     res.status(500).json({ error: error.message });
   }
 };

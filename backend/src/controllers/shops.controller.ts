@@ -18,6 +18,7 @@ export const getShops = async (req: Request, res: Response) => {
       .from(shops)
       .where(
         and(
+          eq(shops.status, 'ACTIVE'),
           or(eq(shops.has_bw, true), eq(shops.has_color, true)),
           gt(shops.last_heartbeat, thirtySecondsAgo)
         )

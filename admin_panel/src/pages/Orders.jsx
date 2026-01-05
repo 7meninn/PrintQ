@@ -10,7 +10,7 @@ import { format } from "date-fns";
 export default function Orders() {
   const { adminToken } = useAdminAuth();
   
-  // Search State
+  // --- 1. Restore State for Search & Actions ---
   const [searchType, setSearchType] = useState("id");
   const [orderId, setOrderId] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -20,10 +20,12 @@ export default function Orders() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
+  // --- 2. Restore Search Logic ---
   const fetchOrders = async () => {
     setLoading(true);
     setSearched(true);
     
+    // Construct URL based on search type
     let url = `${API_BASE_URL}/admin/orders?`;
     if (searchType === "id" && orderId) {
       url += `order_id=${orderId}`;
@@ -34,14 +36,19 @@ export default function Orders() {
     try {
       const res = await fetch(url, { headers: { "x-admin-secret": adminToken } });
       const data = await res.json();
-      setOrders(data);
+      if (res.ok) {
+          setOrders(data || []);
+      } else {
+          alert(data.error || "Failed to fetch");
+      }
     } catch(e) {
-      alert("Failed to fetch");
+      alert("Network Error: " + e.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // --- 3. Restore Action Handlers ---
   const handleRefund = async (id) => {
     const reason = prompt("Enter Refund Reason:");
     if (!reason) return;
@@ -75,16 +82,15 @@ export default function Orders() {
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto pb-24">
        
-       {/* HEADER */}
        <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold text-slate-900">Order Management</h1>
           <p className="text-sm text-slate-500">Search transactions, manage refunds, and monitor status.</p>
        </div>
 
-       {/* SEARCH CARD */}
+       {/* --- 4. Restore Search UI Card --- */}
        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50">
           
-          {/* 1. Filter Toggle (Segmented Control) */}
+          {/* Filter Toggle */}
           <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1.5 rounded-xl mb-6">
              <button 
                 onClick={() => setSearchType("id")}
@@ -108,7 +114,7 @@ export default function Orders() {
              </button>
           </div>
 
-          {/* 2. Input Fields */}
+          {/* Input Fields */}
           <div className="flex flex-col gap-4">
              {searchType === "id" ? (
                 <div className="relative group">
@@ -146,7 +152,7 @@ export default function Orders() {
                 </div>
              )}
 
-             {/* 3. Search Button */}
+             {/* Search Button */}
              <button 
                 onClick={fetchOrders}
                 disabled={loading}
@@ -157,7 +163,7 @@ export default function Orders() {
           </div>
        </div>
 
-       {/* RESULTS */}
+       {/* --- 5. Results Section --- */}
        {searched && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
              <div className="flex items-center justify-between px-1">
@@ -174,7 +180,7 @@ export default function Orders() {
                    {orders.map(order => (
                       <div key={order.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
                          
-                         {/* Header: ID & Status */}
+                         {/* Header */}
                          <div className="flex justify-between items-start mb-4 relative z-10">
                             <div>
                                <div className="flex items-center gap-2 mb-1">
@@ -189,7 +195,6 @@ export default function Orders() {
                                    {order.razorpay_payment_id || "Unpaid"}
                                </p>
                             </div>
-
                             <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
                                 order.status === 'COMPLETED' ? "bg-green-50 text-green-700 border-green-100" :
                                 order.status === 'REFUNDED' ? "bg-orange-50 text-orange-700 border-orange-100" :
@@ -200,7 +205,7 @@ export default function Orders() {
                             </span>
                          </div>
 
-                         {/* Details Grid */}
+                         {/* Details */}
                          <div className="bg-slate-50 rounded-2xl p-4 grid grid-cols-2 gap-y-4 gap-x-2 mb-4 relative z-10">
                             <div>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase">Amount</p>
@@ -220,9 +225,8 @@ export default function Orders() {
                             </div>
                          </div>
 
-                         {/* Actions Toolbar */}
+                         {/* Actions Toolbar - ENABLED */}
                          <div className="flex gap-2 relative z-10">
-                            {/* REFUND */}
                             {(order.status === 'COMPLETED' || order.status === 'FAILED') && (
                                <button 
                                   onClick={() => handleRefund(order.id)}
@@ -231,8 +235,6 @@ export default function Orders() {
                                   <RotateCcw size={14}/> Refund
                                </button>
                             )}
-                            
-                            {/* FORCE FAIL */}
                             {(order.status === 'QUEUED' || order.status === 'PRINTING') && (
                                <button 
                                   onClick={() => handleFail(order.id)}

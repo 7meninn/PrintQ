@@ -4,7 +4,6 @@ const fs = require("fs");
 const { execFile } = require("child_process");
 const https = require("https");
 const http = require("http");
-
 app.disableHardwareAcceleration();
 
 let mainWindow;
@@ -13,10 +12,8 @@ const sumatraPath = app.isPackaged
   ? path.join(process.resourcesPath, "extraResources", "SumatraPDF.exe")
   : path.join(__dirname, "../extraResources/SumatraPDF.exe");
 
-// Cache Directory (Persistent while app is open)
+// Cache Directory
 const CACHE_DIR = path.join(app.getPath("userData"), "print_cache");
-
-// Ensure cache dir exists
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
@@ -37,15 +34,20 @@ function downloadFile(url, destPath) {
     });
 
     request.on("error", (err) => {
-      fs.unlink(destPath, () => {}); 
-      reject(err);
+      fs.unlink(destPath, (unlinkErr) => {
+        if (unlinkErr) {
+          // Log the unlink error but still reject with the original download error
+          console.error(`[Main] Error unlinking file ${destPath}:`, unlinkErr);
+        }
+        reject(err);
+      });
     });
   });
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
+    width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 700,
@@ -53,7 +55,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: false, 
       preload: path.join(__dirname, "preload.cjs"),
     },
     autoHideMenuBar: true,
@@ -75,73 +77,91 @@ app.whenReady().then(() => {
   createWindow();
 
   ipcMain.handle("get-printers", async () => {
+    if (!mainWindow) {
+      throw new Error("Main window not available.");
+    }
     try {
       return await mainWindow.webContents.getPrintersAsync();
     } catch (e) {
-      console.error("Error getting printers:", e);
-      return [];
+      console.error("[Main] Error getting printers:", e);
+      throw new Error("Failed to get printer list."); // Propagate error
     }
   });
 
-  // --- NEW: CLEANUP CACHE COMMAND ---
   ipcMain.handle("cleanup-cache", async () => {
     try {
-      console.log("[Main] Cleaning up print cache...");
-      const files = fs.readdirSync(CACHE_DIR);
-      for (const file of files) {
-        fs.unlinkSync(path.join(CACHE_DIR, file));
+      if (fs.existsSync(CACHE_DIR)) {
+        const files = fs.readdirSync(CACHE_DIR);
+        for (const file of files) {
+          try { fs.unlinkSync(path.join(CACHE_DIR, file)); } catch(e){}
+        }
       }
       return { success: true };
     } catch (e) {
-      console.error("Cleanup failed:", e);
       return { success: false, error: e.message };
     }
   });
 
-  ipcMain.handle("print-job", async (event, { printerName, filePath }) => {
-    return new Promise(async (resolve, reject) => {
-      if (printerName === "Not Available") {
-        return reject("Printer disabled.");
+  ipcMain.handle("print-job", async (event, { printerName, filePath, copies = 1, color = false }) => {
+    if (printerName === "Not Available") {
+      throw new Error("Printer is not available or disabled.");
+    }
+
+    let localFilePath = filePath;
+
+    // 1. Download Handling
+    if (filePath.startsWith("http")) {
+      try {
+        const urlObj = new URL(filePath);
+        const safeName = `job_${Date.now()}_${path.basename(urlObj.pathname).replace(/[^a-zA-Z0-9._-]/g, '')}`;
+        localFilePath = path.join(CACHE_DIR, safeName);
+
+        if (!fs.existsSync(localFilePath)) {
+          console.log(`[Main] Downloading: ${localFilePath}`);
+          await downloadFile(filePath, localFilePath);
+        }
+      } catch (err) {
+        throw new Error(`Download Failed: ${err.message}`);
       }
+    }
 
-      let localFilePath = filePath;
+    if (!fs.existsSync(localFilePath)) {
+      throw new Error(`File not found: ${localFilePath}`);
+    }
 
-      // 1. Handle Remote URLs with Caching
-      if (filePath.startsWith("http")) {
-        try {
-          // Generate a stable filename from the URL to allow caching
-          // e.g., http://site.com/file.pdf?token=123 -> file.pdf
-          const urlObj = new URL(filePath);
-          const baseName = path.basename(urlObj.pathname) || `doc_${Date.now()}.pdf`;
-          // Sanitize filename
-          const safeName = baseName.replace(/[^a-z0-9.]/gi, '_');
-          localFilePath = path.join(CACHE_DIR, safeName);
+    // 2. Construct SumatraPDF Arguments
+    const printSettings = [
+      color ? "color" : "monochrome",
+      `${copies}x` // Add copies to print settings
+    ];
 
-          // Only download if it doesn't exist yet!
-          if (!fs.existsSync(localFilePath)) {
-            console.log(`[Main] Downloading: ${baseName}`);
-            await downloadFile(filePath, localFilePath);
-          } else {
-            console.log(`[Main] Using cached file: ${baseName}`);
+    const args = [
+      "-print-to", printerName,
+      "-silent",
+      "-print-settings", printSettings.join(","),
+      localFilePath
+    ];
+
+    console.log(`[Main] Printing ${copies} copies to ${printerName} [${color ? 'Color' : 'B/W'}] with args: ${args.join(' ')}`);
+
+    // 3. Execute Print Command
+    try {
+      await new Promise((resolve, reject) => {
+        execFile(sumatraPath, args, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`[Main] Print Error:`, error);
+            return reject(error);
           }
-        } catch (err) {
-          return reject(`Download Failed: ${err.message}`);
-        }
-      } else {
-        if (!fs.existsSync(filePath)) return reject("Local file not found");
-      }
-
-      // 2. Print
-      const args = ["-print-to", printerName, "-silent", localFilePath];
-      
-      execFile(sumatraPath, args, (error) => {
-        if (error) {
-          console.error("[Main] Print Error:", error);
-          return reject(error.message);
-        }
-        resolve({ success: true });
+          if (stderr) {
+            console.warn(`[Main] Print stderr:`, stderr);
+          }
+          resolve();
+        });
       });
-    });
+      return { success: true };
+    } catch (e) {
+      throw new Error(`Printing failed: ${e.message}`);
+    }
   });
 });
 

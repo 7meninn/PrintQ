@@ -1,8 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import multer from "multer";
-import { startStationMonitorJob } from "./cron/station_monitor";
-import { startPayoutJob } from "./cron/payouts"; // <--- IMPORT THIS
 import { startGhostStationJob } from "./cron/ghost_station";
 
 import { login, initiateSignup, completeSignup, forgotPassword, resetPassword } from "./controllers/auth.controller";
@@ -12,13 +10,13 @@ import {
   getUserHistory, getUserActiveOrder
 } from "./controllers/orders.controller";
 import { 
-  shopLogin, getPendingJobs, completeJob, shopHeartbeat, failJob,
-  createShop, deleteShop, getShopHistory
+  shopLogin, getPendingJobs, completeJob, shopHeartbeat, failJob, getShopHistory, getShopPayoutHistory
 } from "./controllers/shop_client.controller";
 
 import { startCleanupJob } from "./cron/cleanup";
 import { startRefundJob } from "./cron/refund";
-import { failOrder, getAdminStats, getAllOrders, getAllShops, getPayouts, markPayoutAsPaid, refundOrder } from "./controllers/admin.controller";
+import { startStationMonitorJob } from "./cron/station_monitor";
+import { createShop, deleteShop, failAllQueuedOrdersForShop, failOrder, getAdminStats, getAllOrders, getAllShops, getLiveQueues, getPayouts, getPendingPayouts, logPayment, markPayoutAsPaid, refundOrder } from "./controllers/admin.controller";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +49,7 @@ const adminAuth = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
+// Admin Routes
 app.post("/admin/shops/create", adminAuth, createShop);
 app.post("/admin/shops/delete", adminAuth, deleteShop);
 app.post("/admin/payouts/mark-paid", adminAuth, markPayoutAsPaid);
@@ -59,12 +58,25 @@ app.get("/admin/orders", adminAuth, getAllOrders);
 app.post("/admin/orders/refund", adminAuth, refundOrder);
 app.get("/admin/shops", adminAuth, getAllShops);
 app.get("/admin/payouts", adminAuth, getPayouts);
+app.get("/admin/payouts/pending", adminAuth, getPendingPayouts);
+app.post("/admin/payouts/log", adminAuth, logPayment);
 app.post("/admin/orders/fail", adminAuth, failOrder);
+
+// Live Queue Management
+app.get("/admin/queues", adminAuth, getLiveQueues);
+app.post("/admin/queues/fail-all", adminAuth, failAllQueuedOrdersForShop);
+
+// Auth Routes
 app.post("/auth/login", login);
 app.post("/auth/signup/initiate", initiateSignup);
 app.post("/auth/signup/complete", completeSignup);
 app.post("/auth/forgot-password", forgotPassword);
 app.post("/auth/reset-password", resetPassword);
+
+// Public Routes
+app.get("/api/time", (req, res) => {
+  res.json({ now: new Date() });
+});
 app.get("/shops", getShops);
 
 const handleUpload = (req: Request, res: Response, next: NextFunction) => {
@@ -87,18 +99,22 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
+// Order Routes
 app.post("/orders/preview", handleUpload, prepareOrder);
 app.post("/orders/initiate", initiatePayment);
 app.post("/orders/confirm", confirmOrder);
 app.post("/orders/cancel", cancelOrder);
 
+// User Routes
 app.get("/user/history", getUserHistory);
 app.get("/user/active", getUserActiveOrder);
 
+// Shop Client Routes
 app.post("/shop/login", shopLogin);
 app.post("/shop/heartbeat", shopHeartbeat);
 app.get("/shop/orders", getPendingJobs);
 app.get("/shop/history", getShopHistory);
+app.get("/shop/payouts", getShopPayoutHistory);
 app.post("/shop/complete", completeJob);
 app.post("/shop/fail", failJob);
 
@@ -106,7 +122,6 @@ app.post("/shop/fail", failJob);
 startCleanupJob();
 startRefundJob();
 startStationMonitorJob();
-startPayoutJob(); // <--- START THE JOB
 startGhostStationJob();
 
 app.listen(PORT, () => {

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, ShoppingBag, Store, Wallet, LogOut, Shield } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, Store, Timer, Wallet, Shield, LogOut } from "lucide-react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 
 export default function Sidebar() {
@@ -11,6 +11,7 @@ export default function Sidebar() {
     { to: "/", icon: LayoutDashboard, label: "Home" },
     { to: "/orders", icon: ShoppingBag, label: "Orders" },
     { to: "/shops", icon: Store, label: "Shops" },
+    { to: "/live-queues", icon: Timer, label: "Live Queues" },
     { to: "/payouts", icon: Wallet, label: "Finance" },
   ];
 

@@ -29,6 +29,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
     const configs: FileConfig[] = configStr ? JSON.parse(configStr) : [];
     
     if (!files || files.length === 0) return res.status(400).json({ error: "No files received" });
+    if (files.length !== configs.length) return res.status(400).json({ error: "File and configuration count mismatch."});
     if (!shopId) return res.status(400).json({ error: "Shop ID required" });
     if (!userId) return res.status(400).json({ error: "User ID required" });
 
@@ -37,8 +38,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
 
     const BW_PRICE = 2;
     const COLOR_PRICE = 12;
-    const SERVICE_CHARGE_PERCENTAGE = 0.25;
-    const MAX_SERVICE_CHARGE = 4;
+    const SERVICE_CHARGE_PERCENTAGE = 0.04; // 4%
 
     let summary = {
       total_bw_pages: 0,
@@ -90,10 +90,8 @@ export const prepareOrder = async (req: Request, res: Response) => {
       });
     }
 
-
     summary.print_cost = summary.bw_cost + summary.color_cost;
-    const rawServiceCharge = summary.print_cost * SERVICE_CHARGE_PERCENTAGE;
-    summary.service_charge = Math.ceil(Math.min(rawServiceCharge, MAX_SERVICE_CHARGE));
+    summary.service_charge = Math.ceil(summary.print_cost * SERVICE_CHARGE_PERCENTAGE);
     summary.total_amount = summary.print_cost + summary.service_charge;
 
 
@@ -194,6 +192,11 @@ export const confirmOrder = async (req: Request, res: Response) => {
     const order = await db.query.orders.findFirst({ where: eq(orders.id, order_id) });
     if (!order || !order.razorpay_order_id) {
         return res.status(400).json({ error: "Invalid order state" });
+    }
+    
+    // Security: Ensure order is in DRAFT state before confirming
+    if (order.status !== 'DRAFT') {
+        return res.status(400).json({ error: "Order has already been processed." });
     }
 
     const isValid = verifyPaymentSignature(

@@ -1,0 +1,2 @@
+-- Migration resolved manually as column already exists
+-- ALTER TABLE "orders" ADD COLUMN "razorpay_payment_id" text;

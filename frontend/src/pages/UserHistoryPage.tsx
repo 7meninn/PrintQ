@@ -208,7 +208,7 @@ export default function UserHistoryPage() {
             </h2>
 
             {/* Date Navigator */}
-            <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 shadow-sm">
+            <div className="flex items-center flex-wrap justify-end gap-2 bg-white rounded-lg p-1 border border-gray-200 shadow-sm">
               <button onClick={() => changeDate(-1)} className="p-1.5 hover:bg-gray-50 rounded-md text-gray-500"><ChevronLeft size={16}/></button>
               
               <div className="relative">
@@ -253,24 +253,24 @@ export default function UserHistoryPage() {
                 
                 return (
                   <div key={order.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${isSuccess ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                    <div className="flex justify-between items-start mb-4 gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`p-2 rounded-lg shrink-0 ${isSuccess ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
                           {isSuccess ? <CheckCircle2 size={20}/> : <XCircle size={20}/>}
                         </div>
-                        <div>
-                          <h3 className="font-bold text-gray-900 text-sm">{order.shop_name}</h3>
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-gray-900 text-sm truncate">{order.shop_name}</h3>
                           <p className="text-xs text-gray-500">{format(parseISO(order.created_at), "h:mm a")} • Order #{order.id}</p>
                         </div>
                       </div>
-                      <p className="font-bold text-gray-900">₹{order.total_amount}</p>
+                      <p className="font-bold text-gray-900 shrink-0">₹{order.total_amount}</p>
                     </div>
 
                     <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
                       {order.files.map((f, i) => (
-                        <div key={i} className="flex justify-between">
-                          <span className="truncate max-w-[200px]">{f.filename}</span>
-                          <span className="font-medium">{f.copies}x {f.color ? "Color" : "B/W"} ({f.pages} pgs)</span>
+                        <div key={i} className="flex justify-between items-center gap-2">
+                          <span className="truncate">{f.filename}</span>
+                          <span className="font-medium text-right shrink-0">{f.copies}x {f.color ? "Color" : "B/W"} ({f.pages} pgs)</span>
                         </div>
                       ))}
                     </div>

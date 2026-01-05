@@ -75,22 +75,15 @@ export default function UploadPage() {
     return true;
   });
 
-  // 🔹 3. Auto-Correction
+  // Auto-deselect if the previously selected shop becomes unavailable
   useEffect(() => {
     if (selectedShopId) {
-      const shop = shops.find(s => s.id === selectedShopId);
-      const isStillValid = availableShops.some(s => s.id === selectedShopId);
-      
-      // Select first available if current is invalid
-      if (!shop || !isStillValid) {
-        if(availableShops.length > 0) setSelectedShopId(availableShops[0].id);
-        else setSelectedShopId(null);
+      const isStillAvailable = availableShops.some(s => s.id === selectedShopId);
+      if (!isStillAvailable) {
+        setSelectedShopId(null);
       }
-    } else if (availableShops.length > 0) {
-        // Auto select first if nothing selected
-        setSelectedShopId(availableShops[0].id);
     }
-  }, [needsColor, needsBW, shops, availableShops, selectedShopId, setSelectedShopId]);
+  }, [files, shops]); // Reruns when files or shops list change
 
 
   // --- File Handlers ---
@@ -128,10 +121,10 @@ export default function UploadPage() {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const toggleColor = (index: number) => {
+  const setColor = (index: number, isColor: boolean) => {
     setFiles(prev => {
         const newArr = [...prev];
-        newArr[index] = { ...newArr[index], color: !newArr[index].color };
+        newArr[index] = { ...newArr[index], color: isColor };
         return newArr;
     });
   };
@@ -299,7 +292,7 @@ export default function UploadPage() {
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 pr-8">
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
                                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${item.color ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-500'}`}>{item.file.name.endsWith('pdf') ? <FileText size={24} /> : <Printer size={24} />}</div>
-                                        <div className="min-w-0"><p className="font-medium text-gray-900 truncate text-sm sm:text-base">{item.file.name}</p><p className="text-xs text-gray-500">{(item.file.size / 1024 / 1024).toFixed(2)} MB</p></div>
+                                        <div className="min-w-0"><p className="font-medium text-gray-900 break-all text-sm sm:text-base">{item.file.name}</p><p className="text-xs text-gray-500">{(item.file.size / 1024 / 1024).toFixed(2)} MB</p></div>
                                     </div>
                                     
                                     <div className="flex items-center justify-between sm:justify-end gap-4 mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-0 border-gray-100 w-full sm:w-auto">
@@ -312,7 +305,10 @@ export default function UploadPage() {
                                           <Eye size={18} />
                                         </button>
 
-                                        <button onClick={() => toggleColor(idx)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${item.color ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}><Palette size={14} />{item.color ? "Color" : "B&W"}</button>
+                                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5">
+                                            <button onClick={() => setColor(idx, false)} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${!item.color ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}>B&W</button>
+                                            <button onClick={() => setColor(idx, true)} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${item.color ? 'bg-white shadow-sm text-purple-700' : 'text-gray-500'}`}>Color</button>
+                                        </div>
                                         <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5"><button onClick={() => changeCopies(idx, -1)} disabled={item.copies <= 1} className="p-1.5 hover:bg-white rounded-md text-gray-600 disabled:opacity-30 transition-all"><Minus size={14} /></button><span className="w-8 text-center text-sm font-bold text-gray-900">{item.copies}</span><button onClick={() => changeCopies(idx, 1)} className="p-1.5 hover:bg-white rounded-md text-gray-600 transition-all"><Plus size={14} /></button></div>
                                     </div>
                                 </div>
@@ -365,7 +361,15 @@ export default function UploadPage() {
                                         </div>
                                     </div>
                                 </div>
-                            ) : <span className="text-gray-500 font-medium text-sm pl-1">Choose a printing station...</span>}
+                            ) : (
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-gray-100 text-gray-400 rounded-lg flex items-center justify-center shrink-0"><Store size={20} /></div>
+                                    <div>
+                                        <p className="font-bold text-gray-500 text-sm">Choose a printing station</p>
+                                        <p className="text-xs text-gray-400 mt-1">Click here to see options</p>
+                                    </div>
+                                </div>
+                            )}
                             {isShopDropdownOpen ? <ChevronUp className="text-gray-400" size={20} /> : <ChevronDown className="text-gray-400" size={20} />}
                         </div>
                         {isShopDropdownOpen && (

@@ -6,6 +6,7 @@ import Dashboard from "../pages/Dashboard";
 import Orders from "../pages/Orders";
 import Shops from "../pages/Shops";
 import Payouts from "../pages/Payouts";
+import LiveQueues from "../pages/LiveQueues";
 
 const ProtectedLayout = () => {
   const { adminToken } = useAdminAuth();
@@ -34,6 +35,7 @@ export default function AppRouter() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/shops" element={<Shops />} />
+            <Route path="/live-queues" element={<LiveQueues />} />
             <Route path="/payouts" element={<Payouts />} />
           </Route>
           <Route path="*" element={<Navigate to="/" />} />
