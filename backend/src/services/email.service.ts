@@ -3,15 +3,15 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.titan.email",
-  port: Number(process.env.SMTP_PORT) || 465,
-  secure: true,
+  host: process.env.SMTP_HOST || "smtp.sendgrid.net",
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false, // Use STARTTLS for port 587
   auth: {
-    user: process.env.SMTP_USER,
+    user: process.env.SMTP_USER || "apikey",
     pass: process.env.SMTP_PASS,
   },
-  logger: true,
-  debug: true 
+  logger: false,
+  debug: false 
 });
 
 // ✅ 2. HELPER FUNCTION
