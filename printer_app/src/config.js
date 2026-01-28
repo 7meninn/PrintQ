@@ -14,6 +14,6 @@ const USE_PROD_IN_DEV = true;
 
 // =========================================================================
 
-export const API_BASE_URL = import.meta.env.PROD || USE_PROD_IN_DEV 
+export const API_BASE_URL = USE_PROD_IN_DEV 
   ? PROD_URL 
   : DEV_URL;

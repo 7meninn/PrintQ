@@ -76,15 +76,20 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  ipcMain.handle("get-printers", async () => {
+  ipcMain.handle("get-printers", () => {
     if (!mainWindow) {
       throw new Error("Main window not available.");
     }
     try {
-      return await mainWindow.webContents.getPrintersAsync();
+      // Using synchronous getPrinters() for Electron 22 compatibility (Windows 7 support)
+      // Suppress deprecation warning - getPrintersAsync() not available in Electron 22
+      process.emitWarning = () => {};
+      const printers = mainWindow.webContents.getPrinters();
+      process.emitWarning = console.warn;
+      return printers;
     } catch (e) {
       console.error("[Main] Error getting printers:", e);
-      throw new Error("Failed to get printer list."); // Propagate error
+      throw new Error("Failed to get printer list.");
     }
   });
 

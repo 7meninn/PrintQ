@@ -9,7 +9,7 @@ const PROD_URL = "https://printq-api-c6h3bsewd5cxfwgr.centralindia-01.azurewebsi
 const DEV_URL = "http://localhost:3000";
 
 // 3. Toggle this to TRUE to test the Production Backend on Localhost
-const USE_PROD_IN_DEV = true; 
+const USE_PROD_IN_DEV = false; 
 
 // =========================================================================
 

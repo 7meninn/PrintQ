@@ -94,7 +94,7 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
              if (isPrintingThis) {
                 buttonText = <><Loader2 className="animate-spin" size={16}/> Printing...</>;
              } else if (isComplete) {
-                buttonText = <><RefreshCw size={14}/> Print Extra</>; 
+                buttonText = <><RefreshCw size={14}/> Reprint</>; 
              } else if (isTurn) {
                 buttonText = file.copies > 1 
                   ? <><Play size={16}/> Print Copy ({numPrinted + 1}/{file.copies})</>
