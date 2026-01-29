@@ -17,8 +17,9 @@ const transporter = nodemailer.createTransport({
 // ✅ 2. HELPER FUNCTION
 const sendEmail = async (to: string, subject: string, html: string) => {
   try {
+    const fromEmail = process.env.SMTP_FROM || "noreply@printq.app";
     const info = await transporter.sendMail({
-      from: `"PrintQ Support" <${process.env.SMTP_USER}>`,
+      from: `"PrintQ Support" <${fromEmail}>`,
       to,
       subject,
       html,
