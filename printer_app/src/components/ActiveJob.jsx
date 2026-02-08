@@ -70,16 +70,16 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
   const isAnyFilePrinting = printingFile !== null;
 
   return (
-    <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-0">
       
-      <div className="bg-white border border-blue-100 rounded-2xl p-6 shadow-sm flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-white mb-6">
+      <div className="bg-white border border-blue-100 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-blue-50/50 to-white mb-4 sm:mb-6">
          <div className="flex items-center gap-5">
             <div className="w-16 h-16 bg-white rounded-2xl border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm shadow-blue-100">
                <Printer size={32} />
             </div>
             <div>
                <div className="flex items-center gap-3 mb-1">
-                  <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Order #{order.order_id}</h2>
+               <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Order #{order.order_id}</h2>
                   <span className="bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-lg text-xs font-bold uppercase tracking-wide border border-blue-200">
                      Processing
                   </span>
@@ -89,11 +89,11 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
          </div>
          <div className="text-right">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Files</p>
-            <p className="text-4xl font-extrabold text-gray-900 leading-none">{order.files.length}</p>
+            <p className="text-3xl sm:text-4xl font-extrabold text-gray-900 leading-none">{order.files.length}</p>
          </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden mb-6 relative">
+      <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden mb-4 sm:mb-6 relative min-h-0">
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center sticky top-0 z-10 backdrop-blur-sm">
             <h3 className="font-bold text-gray-700">Document Queue (Sequential)</h3>
             <span className="text-xs font-bold bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-gray-500 shadow-sm">
@@ -101,7 +101,7 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
             </span>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar min-h-0">
           {order.files.map((file, idx) => {
              const numPrinted = copiesPrinted[file.filename] || 0;
              const isComplete = numPrinted >= file.copies;
@@ -156,7 +156,7 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
                   <button 
                      disabled={isDisabled}
                      onClick={() => handlePrint(file)}
-                     className={`w-48 py-3 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
+                     className={`w-36 sm:w-48 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                         isPrintingThis 
                            ? "bg-gray-100 text-gray-400"
                            : !isTurn && !isComplete
@@ -174,7 +174,7 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
         </div>
       </div>
 
-      <div className="h-24 bg-white border border-gray-200 rounded-2xl shadow-lg shadow-gray-200/50 flex items-center justify-between px-8">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-lg shadow-gray-200/50 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-8 py-3">
         <button 
           onClick={() => { 
             if (confirm("Are you sure you want to fail this order? This cannot be undone.")) {
@@ -182,11 +182,11 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
             }
           }}
           disabled={isAnyFilePrinting}
-          className="text-red-500 hover:text-red-700 hover:bg-red-50 px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors border border-transparent hover:border-red-100 disabled:opacity-50"
+          className="text-red-500 hover:text-red-700 hover:bg-red-50 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors border border-transparent hover:border-red-100 disabled:opacity-50"
         >
           <AlertOctagon size={18} /> Fail Order
         </button>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
           {!allFilesCompleted && (
             <div className="flex items-center text-amber-600 text-xs font-bold bg-amber-50 px-4 py-2 rounded-xl border border-amber-100 animate-pulse">
               <Lock size={14} className="mr-2" />
@@ -196,7 +196,7 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
           <button 
             disabled={!allFilesCompleted || isAnyFilePrinting}
             onClick={() => onComplete(order.order_id)}
-            className={`flex items-center px-8 py-3.5 rounded-xl font-bold text-base shadow-lg transition-all active:scale-[0.98] ${
+            className={`flex items-center px-5 sm:px-8 py-3.5 rounded-xl font-bold text-sm sm:text-base shadow-lg transition-all active:scale-[0.98] ${
               allFilesCompleted 
                 ? "bg-green-600 text-white hover:bg-green-700 hover:shadow-green-200" 
                 : "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none"

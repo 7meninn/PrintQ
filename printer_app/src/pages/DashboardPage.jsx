@@ -20,6 +20,7 @@ export default function DashboardPage() {
   
   const [queue, setQueue] = useState([]);
   const [activeJob, setActiveJob] = useState(null);
+  const [suppressedOrderIds, setSuppressedOrderIds] = useState([]);
   
   // --- STATS LOGIC ---
   const [currentDate, setCurrentDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -42,6 +43,19 @@ export default function DashboardPage() {
   
   const activeJobRef = useRef(activeJob);
   useEffect(() => { activeJobRef.current = activeJob; }, [activeJob]);
+
+  const suppressedOrderIdsRef = useRef(suppressedOrderIds);
+  useEffect(() => { suppressedOrderIdsRef.current = suppressedOrderIds; }, [suppressedOrderIds]);
+
+  const suppressOrderId = (orderId) => {
+    setSuppressedOrderIds(prev => {
+      if (prev.includes(orderId)) return prev;
+      const next = [...prev, orderId];
+      suppressedOrderIdsRef.current = next;
+      return next;
+    });
+    setQueue(prev => prev.filter(j => j.order_id !== orderId));
+  };
 
   // --- PAUSE TIMER ---
   const [pauseTime, setPauseTime] = useState(PAUSE_TIMEOUT_SECONDS);
@@ -71,8 +85,15 @@ export default function DashboardPage() {
         if (res.ok) {
           const jobs = await res.json();
           if (Array.isArray(jobs)) {
-            // Server is the source of truth for the queue.
-            setQueue(jobs);
+            const activeIds = new Set(jobs.map(j => j.order_id));
+            setSuppressedOrderIds(prev => {
+              const next = prev.filter(id => activeIds.has(id));
+              suppressedOrderIdsRef.current = next;
+              return next;
+            });
+
+            const filteredJobs = jobs.filter(j => !suppressedOrderIdsRef.current.includes(j.order_id));
+            setQueue(filteredJobs);
             
             // If there's an active job, check if it was cancelled remotely.
             if (activeJobRef.current && !jobs.some(j => j.order_id === activeJobRef.current.order_id)) {
@@ -118,10 +139,11 @@ export default function DashboardPage() {
 
   const handleCompleteJob = async (orderId) => {
     try {
-      await fetch(`${API_BASE_URL}/shop/complete`, {
+      const res = await fetch(`${API_BASE_URL}/shop/complete`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId })
       });
+      if (!res.ok) throw new Error("Failed to mark complete");
       if (activeJob) {
         let bwCount = 0, colorCount = 0;
         activeJob.files.forEach(f => {
@@ -130,6 +152,7 @@ export default function DashboardPage() {
         });
         setStats(prev => ({ bw: (prev?.bw || 0) + bwCount, color: (prev?.color || 0) + colorCount }));
       }
+      suppressOrderId(orderId);
       setActiveJob(null);
       if (window.electronAPI?.cleanupCache) await window.electronAPI.cleanupCache();
     } catch (e) { alert("Network Error: Could not mark complete."); }
@@ -137,21 +160,24 @@ export default function DashboardPage() {
 
   const handleFailJob = async (orderId, reason = "Operator Cancelled") => {
     try {
-      await fetch(`${API_BASE_URL}/shop/fail`, {
+      const res = await fetch(`${API_BASE_URL}/shop/fail`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId, reason })
       });
+      if (!res.ok) throw new Error("Failed to fail order");
       if (activeJobRef.current?.order_id === orderId) {
         setActiveJob(null);
       }
+      suppressOrderId(orderId);
       if (window.electronAPI?.cleanupCache) await window.electronAPI.cleanupCache();
+      return true;
     } catch(e) { alert("Network Error"); }
+    return false;
   };
   
   const handleFailQueueOrder = async (orderId) => {
     if(!confirm("Reject this order?")) return;
     await handleFailJob(orderId, "Rejected from Queue");
-    setQueue(prev => prev.filter(j => j.order_id !== orderId));
   };
   
   const queuedJobs = queue.filter(j => j.order_id !== activeJob?.order_id);
@@ -217,7 +243,7 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 font-sans text-gray-900 overflow-hidden">
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between h-16 shrink-0 z-20">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 min-h-[4rem] shrink-0 z-20">
         {/* Header */}
         <div className="flex items-center gap-4">
            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md shadow-blue-200">P</div>
@@ -230,7 +256,7 @@ export default function DashboardPage() {
               </p>
            </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
            <div className="hidden sm:flex items-center gap-6 text-right mr-4">
               <div className="flex flex-col items-end">
                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Pages Today</p>
@@ -253,18 +279,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-12 gap-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto lg:overflow-hidden min-h-0">
         {/* Left Panel */}
-        <div className="col-span-3 bg-white border-r border-gray-200 flex flex-col z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-            <div className="p-5 border-b border-gray-100 bg-gray-50/30">
+        <div className="col-span-1 lg:col-span-3 bg-white border-r border-gray-200 flex flex-col z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] min-h-0">
+            <div className="p-4 sm:p-5 border-b border-gray-100 bg-gray-50/30 shrink-0">
                <HardwarePanel config={config} setConfig={setConfig} printers={printers} disabled={serviceStatus === 'active'} />
             </div>
-            <div className="flex-1 p-5 flex flex-col bg-gray-50/30">
-               <div className="flex items-center gap-2 text-gray-400 font-bold text-xs uppercase tracking-wider mb-4"><History size={14}/> Next Order</div>
+            <div className="flex-1 p-4 sm:p-5 flex flex-col bg-gray-50/30 overflow-y-auto min-h-0">
+            <div className="flex items-center gap-2 text-gray-400 font-bold text-[11px] uppercase tracking-wider mb-4"><History size={14}/> Next Order</div>
                {nextOrder ? (
-                  <div className="bg-white border-2 border-blue-100 rounded-2xl p-5 shadow-sm flex-1 flex flex-col relative overflow-hidden animate-in fade-in slide-in-from-left-4">
-                     <div className="flex justify-between items-start mb-4">
-                        <div><h3 className="text-lg font-bold text-gray-900 leading-none">#{nextOrder.order_id}</h3><p className="text-xs text-gray-500 mt-1 truncate max-w-[120px]">{nextOrder.user_name || "Guest"}</p></div>
+                   <div className="bg-white border-2 border-blue-100 rounded-2xl p-4 sm:p-5 shadow-sm flex-1 flex flex-col relative overflow-hidden animate-in fade-in slide-in-from-left-4">
+                      <div className="flex justify-between items-start mb-4">
+                         <div><h3 className="text-base sm:text-lg font-bold text-gray-900 leading-none">#{nextOrder.order_id}</h3><p className="text-xs text-gray-500 mt-1 truncate max-w-[160px]">{nextOrder.user_name || "Guest"}</p></div>
                         <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs font-bold uppercase">Queued</span>
                      </div>
                       <div className="grid grid-cols-3 gap-2 mb-6">
@@ -273,10 +299,10 @@ export default function DashboardPage() {
                          <div className="bg-blue-50 rounded-lg p-2 text-center border border-blue-100"><p className="text-[10px] text-blue-400 font-bold uppercase">A3 Pages</p><p className="text-xl font-mono font-bold text-blue-800">{nextA3Pages}</p></div>
                       </div>
                      {!canOpenNext && (<div className="bg-red-50 border border-red-100 rounded-lg p-3 mb-4 flex gap-2"><Ban className="text-red-500 shrink-0" size={16} /><p className="text-xs font-bold text-red-600 leading-tight">Locked: {blockReason}</p></div>)}
-                     <div className="mt-auto space-y-2">
-                        <button onClick={handleOpenOrder} disabled={activeJob !== null || !canOpenNext || serviceStatus !== 'active'} className={`w-full py-3 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 ${activeJob !== null || !canOpenNext || serviceStatus !== 'active' ? "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none" : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200"}`} >{activeJob ? "Finish Active Job" : "Open Order"} <ChevronRight size={16}/></button>
-                        <button onClick={() => handleFailQueueOrder(nextOrder.order_id)} className="w-full py-2.5 text-red-500 font-bold text-xs hover:bg-red-50 rounded-lg transition-colors">Reject Order</button>
-                     </div>
+                      <div className="mt-auto space-y-2">
+                         <button onClick={handleOpenOrder} disabled={activeJob !== null || !canOpenNext || serviceStatus !== 'active'} className={`w-full py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 ${activeJob !== null || !canOpenNext || serviceStatus !== 'active' ? "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none" : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200"}`} >{activeJob ? "Finish Active Job" : "Open Order"} <ChevronRight size={16}/></button>
+                         <button onClick={() => handleFailQueueOrder(nextOrder.order_id)} className="w-full py-2 text-red-500 font-bold text-[11px] sm:text-xs hover:bg-red-50 rounded-lg transition-colors">Reject Order</button>
+                      </div>
                   </div>
                ) : (
                   <div className="flex-1 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center text-center p-4 bg-white">
@@ -288,9 +314,9 @@ export default function DashboardPage() {
             </div>
          </div>
         {/* Right Panel */}
-         <div className="col-span-9 bg-slate-50 p-8 flex flex-col relative overflow-hidden">
+         <div className="col-span-1 lg:col-span-9 bg-slate-50 p-4 sm:p-6 lg:p-8 flex flex-col relative overflow-y-auto min-h-0">
             <div className="absolute inset-0 z-0 pointer-events-none opacity-30" style={{ backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-            <div className="relative z-10 h-full max-w-5xl mx-auto w-full flex flex-col">
+            <div className="relative z-10 h-full max-w-5xl mx-auto w-full flex flex-col min-h-0">
                {serviceStatus === 'idle' && (<div className="flex-1 flex flex-col items-center justify-center text-center"><div className="w-24 h-24 bg-white rounded-[2rem] shadow-xl shadow-blue-100 border border-blue-50 flex items-center justify-center mb-6"><Server size={48} className="text-blue-200" /></div><h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Station Offline</h2><p className="text-gray-500 mt-2">Configure printers and Start Service.</p></div>)}
                {serviceStatus === 'active' && !activeJob && (<div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-[2.5rem] bg-white/40 animate-in fade-in"><div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6 animate-pulse"><Zap size={32} className="text-blue-500" /></div><h2 className="text-2xl font-bold text-gray-900">Ready to Print</h2><p className="text-gray-500 mt-2">Open the next order to begin.</p></div>)}
                {activeJob && (<ActiveJob order={activeJob} config={config} onComplete={handleCompleteJob} onFail={handleFailJob} />)}
