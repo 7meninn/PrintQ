@@ -113,6 +113,20 @@
       "when": 1767613606052,
       "tag": "0015_foamy_crystal",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1767613606053,
+      "tag": "0016_add_paper_size_to_order_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1767613606054,
+      "tag": "0017_add_a3_capabilities_to_shops",
+      "breakpoints": true
     }
   ]
 }

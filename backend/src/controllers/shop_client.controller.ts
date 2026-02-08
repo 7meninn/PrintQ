@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 
 
 export const shopLogin = async (req: Request, res: Response) => {
-  const { id, password, has_bw, has_color } = req.body;
+  const { id, password, has_bw, has_color, has_bw_a3, has_color_a3 } = req.body;
   
   const shop = await db.query.shops.findFirst({ where: eq(shops.id, id) });
 
@@ -16,15 +16,18 @@ export const shopLogin = async (req: Request, res: Response) => {
     return res.status(401).json({ error: "Invalid Station ID or Password" });
   }
 
-  if (has_bw !== undefined || has_color !== undefined) {
-    await db.update(shops)
-      .set({ 
-        has_bw: !!has_bw, 
-        has_color: !!has_color,
-        last_heartbeat: new Date()
-      })
-      .where(eq(shops.id, id));
-  }
+  const loginUpdate: Partial<typeof shops.$inferInsert> = {
+    last_heartbeat: new Date()
+  };
+
+  if (has_bw !== undefined) loginUpdate.has_bw = !!has_bw;
+  if (has_color !== undefined) loginUpdate.has_color = !!has_color;
+  if (has_bw_a3 !== undefined) loginUpdate.has_bw_a3 = !!has_bw_a3;
+  if (has_color_a3 !== undefined) loginUpdate.has_color_a3 = !!has_color_a3;
+
+  await db.update(shops)
+    .set(loginUpdate)
+    .where(eq(shops.id, id));
 
   const updatedShop = await db.query.shops.findFirst({ where: eq(shops.id, id) });
   res.json({ success: true, shop: updatedShop, server_time: new Date() });
@@ -32,13 +35,19 @@ export const shopLogin = async (req: Request, res: Response) => {
 
 // 2. Heartbeat
 export const shopHeartbeat = async (req: Request, res: Response) => {
-  const { id, has_bw, has_color } = req.body;
+  const { id, has_bw, has_color, has_bw_a3, has_color_a3 } = req.body;
+
+  const heartbeatUpdate: Partial<typeof shops.$inferInsert> = {
+    last_heartbeat: new Date()
+  };
+
+  if (has_bw !== undefined) heartbeatUpdate.has_bw = !!has_bw;
+  if (has_color !== undefined) heartbeatUpdate.has_color = !!has_color;
+  if (has_bw_a3 !== undefined) heartbeatUpdate.has_bw_a3 = !!has_bw_a3;
+  if (has_color_a3 !== undefined) heartbeatUpdate.has_color_a3 = !!has_color_a3;
+
   await db.update(shops)
-    .set({ 
-        last_heartbeat: new Date(),
-        has_bw: !!has_bw,
-        has_color: !!has_color
-    })
+    .set(heartbeatUpdate)
     .where(eq(shops.id, id));
   res.json({ success: true });
 };
@@ -83,7 +92,8 @@ export const getPendingJobs = async (req: Request, res: Response) => {
           filename: f.file_url.split('/').pop() || `file_${f.id}`,
           copies: f.copies,
           color: f.color,
-          pages: f.pages
+          pages: f.pages,
+          paper_size: f.paper_size
         }));
 
         return {

@@ -52,6 +52,13 @@
           "notNull": false,
           "default": false
         },
+        "paper_size": {
+          "name": "paper_size",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'A4'"
+        },
         "cost": {
           "name": "cost",
           "type": "numeric",
@@ -464,6 +471,20 @@
         },
         "has_color": {
           "name": "has_color",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "has_bw_a3": {
+          "name": "has_bw_a3",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "has_color_a3": {
+          "name": "has_color_a3",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,

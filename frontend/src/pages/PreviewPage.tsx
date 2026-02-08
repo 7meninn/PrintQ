@@ -14,6 +14,10 @@ interface PreviewData {
     files: LocalFileItem[];
     shop_id: number;
     shop_name: string;
+    shop_has_bw?: boolean;
+    shop_has_color?: boolean;
+    shop_has_bw_a3?: boolean;
+    shop_has_color_a3?: boolean;
 }
 
 interface ProcessedFile {
@@ -25,6 +29,7 @@ interface ProcessedFile {
   cost: number;
   color: boolean;
   copies: number;
+  paper_size: "A3" | "A4";
 }
 
 export default function PreviewPage() {
@@ -44,10 +49,14 @@ export default function PreviewPage() {
     total_color_pages: 0,
     bw_cost: 0,
     color_cost: 0,
+    separator_cost: 0,
+    separator_is_color: false,
+    separator_paper_size: "A4" as "A3" | "A4",
     print_cost: 0,
     service_charge: 0,
     total_amount: 0
   });
+
 
   const [viewFile, setViewFile] = useState<File | null>(null);
 
@@ -64,6 +73,9 @@ export default function PreviewPage() {
         const BW_PRICE = 2;
         const COLOR_PRICE = 12;
         const SERVICE_CHARGE_PERCENTAGE = 0.04; // 4%
+        const hasA4Printer = !!state.shop_has_bw || !!state.shop_has_color;
+        const separatorIsColor = false;
+        const separatorPrice = hasA4Printer ? BW_PRICE : 0;
 
         const results: ProcessedFile[] = [];
         let bwPages = 0;
@@ -106,21 +118,26 @@ export default function PreviewPage() {
                 calculated_pages: totalPages,
                 cost: fileCost,
                 color: item.color,
-                copies: item.copies
+                copies: item.copies,
+                paper_size: item.paper_size === "A3" ? "A3" : "A4"
             });
         }
 
-        const printCost = bwCostAccumulator + colorCostAccumulator;
+        const printCost = bwCostAccumulator + colorCostAccumulator + separatorPrice;
         const serviceCharge = Math.ceil(printCost * SERVICE_CHARGE_PERCENTAGE);
         const grandTotal = printCost + serviceCharge;
 
         setProcessedFiles(results);
-        
+        const separatorPaperSize = "A4";
+
         setSummary({
             total_bw_pages: bwPages,
             total_color_pages: colorPages,
             bw_cost: bwCostAccumulator,
             color_cost: colorCostAccumulator,
+            separator_cost: separatorPrice,
+            separator_is_color: separatorIsColor,
+            separator_paper_size: separatorPaperSize,
             print_cost: printCost,
             service_charge: serviceCharge,
             total_amount: grandTotal
@@ -150,12 +167,14 @@ export default function PreviewPage() {
 
       const configArray = processedFiles.map(f => ({ 
           color: f.color, 
-          copies: f.copies 
+          copies: f.copies,
+          paper_size: f.paper_size
       }));
       
       formData.append('config', JSON.stringify(configArray));
       formData.append('shop_id', String(state.shop_id));
-      if(user?.id) formData.append('user_id', String(user.id));
+      if (user?.id) formData.append('user_id', String(user.id));
+      if (user?.name) formData.append('student_name', user.name);
 
       const initRes = await fetch(`${API_BASE_URL}/orders/preview`, {
         method: "POST",
@@ -333,6 +352,7 @@ export default function PreviewPage() {
                                     </p>
                                     <div className="flex flex-wrap gap-2 mt-2">
                                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${file.color ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{file.color ? <Palette size={10} /> : <Printer size={10} />}{file.color ? "Color" : "B&W"}</span>
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${file.paper_size === "A3" ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{file.paper_size}</span>
                                         <span className="text-xs text-gray-500 font-medium px-1 py-0.5">{file.detected_pages} pgs × {file.copies} copies</span>
                                     </div>
                                 </div>
@@ -381,6 +401,16 @@ export default function PreviewPage() {
                     
                     <div className="h-px bg-gray-700 my-2"></div>
                     
+                     <div className={`flex justify-between items-center text-xs ${(!state?.shop_has_bw && !state?.shop_has_color) ? "text-amber-300" : "text-blue-300"}`}>
+                        <span>
+                          {(!state?.shop_has_bw && !state?.shop_has_color)
+                            ? "Separator sheet (not printed - no A4 printer)"
+                            : `Separator sheet (${summary.separator_paper_size} ${summary.separator_is_color ? "Color" : "B/W"})`
+                          }
+                        </span>
+                        <span>₹{summary.separator_cost}</span>
+                    </div>
+
                     <div className="flex justify-between items-center text-xs text-yellow-400">
                         <span>Service Charge</span>
                         <span>₹{summary.service_charge}</span>

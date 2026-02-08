@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext"; 
 import { useOrder } from "../context/OrderContext"; 
 import { API_BASE_URL } from "../config";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { 
   UploadCloud, FileText, X, Minus, Plus, Store, Palette, 
   ChevronDown, ChevronUp, Loader2, AlertCircle, RefreshCw, 
@@ -17,6 +16,8 @@ interface Shop {
   queue: number;
   has_bw: boolean;
   has_color: boolean;
+  has_bw_a3?: boolean;
+  has_color_a3?: boolean;
 }
 
 export default function UploadPage() {
@@ -68,10 +69,25 @@ export default function UploadPage() {
 
   const needsColor = files.some(f => f.color);
   const needsBW = files.some(f => !f.color);
+  const needsA3Color = files.some(f => f.paper_size === "A3" && f.color);
+  const needsA3BW = files.some(f => f.paper_size === "A3" && !f.color);
+  const needsA4Color = files.some(f => f.paper_size !== "A3" && f.color);
+  const needsA4BW = files.some(f => f.paper_size !== "A3" && !f.color);
    
   const availableShops = shops.filter(shop => {
-    if (needsColor && !shop.has_color) return false;
-    if (needsBW && !shop.has_bw) return false;
+    const supportsA4Color = !!shop.has_color;
+    const supportsA4BW = !!shop.has_bw;
+    const supportsA3Color = !!shop.has_color_a3;
+    const supportsA3BW = !!shop.has_bw_a3;
+
+    if (needsA4Color && !supportsA4Color) return false;
+    if (needsA4BW && !supportsA4BW) return false;
+    if (needsA3Color && !supportsA3Color) return false;
+    if (needsA3BW && !supportsA3BW) return false;
+
+    if (needsColor && !supportsA4Color && !supportsA3Color) return false;
+    if (needsBW && !supportsA4BW && !supportsA3BW) return false;
+
     return true;
   });
 
@@ -113,7 +129,7 @@ export default function UploadPage() {
     }
 
     if (validFiles.length > 0) {
-        setFiles(prev => [...prev, ...validFiles.map(file => ({ file, color: false, copies: 1 }))]);
+        setFiles(prev => [...prev, ...validFiles.map(file => ({ file, color: false, copies: 1, paper_size: "A4" as const }))]);
     }
   };
 
@@ -125,6 +141,14 @@ export default function UploadPage() {
     setFiles(prev => {
         const newArr = [...prev];
         newArr[index] = { ...newArr[index], color: isColor };
+        return newArr;
+    });
+  };
+
+  const setPaperSize = (index: number, paperSize: "A3" | "A4") => {
+    setFiles(prev => {
+        const newArr = [...prev];
+        newArr[index] = { ...newArr[index], paper_size: paperSize };
         return newArr;
     });
   };
@@ -146,34 +170,6 @@ export default function UploadPage() {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFiles(Array.from(e.dataTransfer.files));
   };
 
-  const generateSeparator = async () => {
-    const doc = await PDFDocument.create();
-    const page = doc.addPage([400, 600]);
-    const { height } = page.getSize();
-    const font = await doc.embedFont(StandardFonts.HelveticaBold);
-    const fontReg = await doc.embedFont(StandardFonts.Helvetica);
-
-    page.drawText("PrintQ", { x: 20, y: height - 50, size: 24, font, color: rgb(0, 0.4, 0.8) });
-    page.drawText("SEPARATOR SHEET", { x: 20, y: height - 80, size: 12, font: fontReg, color: rgb(0.5, 0.5, 0.5) });
-    
-    // User Name
-    const userName = user?.name || "Guest";
-    page.drawText(userName.toUpperCase(), { x: 20, y: height - 140, size: 28, font, color: rgb(0, 0, 0) });
-    
-    page.drawText(`Total Files: ${files.length}`, { x: 20, y: height - 180, size: 18, font });
-    page.drawText("Please collect all documents below this sheet.", { x: 20, y: 30, size: 10, font: fontReg, color: rgb(0.5, 0.5, 0.5) });
-
-    const pdfBytes = await doc.save();
-    const arrayBuffer = new ArrayBuffer(pdfBytes.byteLength);
-    new Uint8Array(arrayBuffer).set(pdfBytes);
-
-    return new File(
-    [arrayBuffer],
-    "000_Separator.pdf",
-    { type: "application/pdf" }
-    );
-};
-
   // --- Submit ---
   const handleProceedToPreview = async () => {
     if (files.length === 0 || !selectedShopId) return;
@@ -182,27 +178,15 @@ export default function UploadPage() {
     try {
         const shop = shops.find(s => s.id === selectedShopId);
         
-        // 1. Generate Separator
-        const separatorFile = await generateSeparator();
-        
-        // 2. Determine Logic: 
-        // If shop has B/W printer -> Use B/W (Cost: 2)
-        // If shop ONLY has Color -> Force Color (Cost: 12)
-        const isBwAvailable = shop?.has_bw;
-        
-        const separatorItem = { 
-            file: separatorFile, 
-            color: !isBwAvailable, // True if BW is missing
-            copies: 1 
-        };
-        
-        const filesToPreview = [separatorItem, ...files];
-        
         navigate("/preview", { 
             state: { 
-                files: filesToPreview, 
+                files, 
                 shop_id: selectedShopId, 
-                shop_name: shop?.name 
+                shop_name: shop?.name,
+                shop_has_bw: shop?.has_bw,
+                shop_has_color: shop?.has_color,
+                shop_has_bw_a3: shop?.has_bw_a3,
+                shop_has_color_a3: shop?.has_color_a3
             } 
         });
 
@@ -309,6 +293,10 @@ export default function UploadPage() {
                                             <button onClick={() => setColor(idx, false)} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${!item.color ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}>B&W</button>
                                             <button onClick={() => setColor(idx, true)} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${item.color ? 'bg-white shadow-sm text-purple-700' : 'text-gray-500'}`}>Color</button>
                                         </div>
+                                            <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5">
+                                                <button onClick={() => setPaperSize(idx, "A4")} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${item.paper_size !== "A3" ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500'}`}>A4</button>
+                                                <button onClick={() => setPaperSize(idx, "A3")} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${item.paper_size === "A3" ? 'bg-white shadow-sm text-purple-700' : 'text-gray-500'}`}>A3</button>
+                                            </div>
                                         <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5"><button onClick={() => changeCopies(idx, -1)} disabled={item.copies <= 1} className="p-1.5 hover:bg-white rounded-md text-gray-600 disabled:opacity-30 transition-all"><Minus size={14} /></button><span className="w-8 text-center text-sm font-bold text-gray-900">{item.copies}</span><button onClick={() => changeCopies(idx, 1)} className="p-1.5 hover:bg-white rounded-md text-gray-600 transition-all"><Plus size={14} /></button></div>
                                     </div>
                                 </div>
@@ -335,11 +323,13 @@ export default function UploadPage() {
                         <AlertCircle className="mx-auto mb-2" />
                         <p className="font-bold text-sm">No Available Stations</p>
                         <p className="text-xs mt-1 opacity-80">
-                            {needsColor && needsBW 
-                                ? "No shop supports BOTH B/W and Color printing." 
-                                : needsColor 
-                                    ? "No shops support COLOR printing right now." 
-                                    : "No shops support B/W printing right now."}
+                            {needsA3Color || needsA3BW
+                                ? "No shop supports the selected A3 print requirements." 
+                                : needsColor && needsBW 
+                                    ? "No shop supports BOTH B/W and Color printing." 
+                                    : needsColor 
+                                        ? "No shops support COLOR printing right now." 
+                                        : "No shops support B/W printing right now."}
                         </p>
                     </div>
                 )}
@@ -355,8 +345,10 @@ export default function UploadPage() {
                                         <div className="flex items-center gap-2 mt-1">
                                             <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${getQueueStatus(selectedShop.queue).color} border-opacity-50`}>{getQueueStatus(selectedShop.queue).label} Queue</span>
                                             <div className="flex gap-1 opacity-75">
-                                                {selectedShop.has_color && <span title="Color Supported" className="p-0.5 bg-purple-100 text-purple-600 rounded"><Palette size={10}/></span>}
-                                                {selectedShop.has_bw && <span title="B&W Supported" className="p-0.5 bg-gray-200 text-gray-600 rounded"><Printer size={10}/></span>}
+                                                 {selectedShop.has_color && <span title="A4 Color Supported" className="p-0.5 bg-purple-100 text-purple-600 rounded"><Palette size={10}/></span>}
+                                                 {selectedShop.has_bw && <span title="A4 B&W Supported" className="p-0.5 bg-gray-200 text-gray-600 rounded"><Printer size={10}/></span>}
+                                                {selectedShop.has_color_a3 && <span title="A3 Color Supported" className="px-1 text-[9px] font-bold rounded bg-purple-50 text-purple-700 border border-purple-100">A3C</span>}
+                                                {selectedShop.has_bw_a3 && <span title="A3 B&W Supported" className="px-1 text-[9px] font-bold rounded bg-blue-50 text-blue-700 border border-blue-100">A3B</span>}
                                             </div>
                                         </div>
                                     </div>
@@ -381,8 +373,10 @@ export default function UploadPage() {
                                             <div className="text-left truncate">
                                                 <p className={`font-bold text-sm truncate ${selectedShopId === shop.id ? "text-blue-900" : "text-gray-700"}`}>{shop.name}</p>
                                                 <div className="flex gap-1 mt-0.5">
-                                                    {shop.has_color && <span className="text-[10px] text-purple-600 bg-purple-50 px-1 rounded font-medium">Color</span>}
-                                                    {shop.has_bw && <span className="text-[10px] text-gray-600 bg-gray-100 px-1 rounded font-medium">B&W</span>}
+                                                    {shop.has_color && <span className="text-[10px] text-purple-600 bg-purple-50 px-1 rounded font-medium">A4 Color</span>}
+                                                    {shop.has_bw && <span className="text-[10px] text-gray-600 bg-gray-100 px-1 rounded font-medium">A4 B&W</span>}
+                                                    {shop.has_color_a3 && <span className="text-[10px] text-purple-700 bg-purple-50 px-1 rounded font-medium border border-purple-100">A3 Color</span>}
+                                                    {shop.has_bw_a3 && <span className="text-[10px] text-blue-700 bg-blue-50 px-1 rounded font-medium border border-blue-100">A3 B&W</span>}
                                                 </div>
                                             </div>
                                         </div>

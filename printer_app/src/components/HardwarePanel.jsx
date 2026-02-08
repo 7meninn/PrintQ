@@ -101,7 +101,7 @@ export default function HardwarePanel({ config, setConfig, printers, disabled })
         </div>
         <div>
           <h3 className={`text-[10px] font-extrabold uppercase tracking-widest leading-none ${disabled ? "text-gray-400" : "text-blue-700"}`}>
-            Hardware Config
+            Hardware Config (A4/A3)
           </h3>
           <p className="text-[10px] text-gray-400 font-medium mt-0.5">Assign active printers</p>
         </div>
@@ -113,7 +113,7 @@ export default function HardwarePanel({ config, setConfig, printers, disabled })
         <div>
           <label className={`block text-[10px] font-bold uppercase mb-1.5 ml-1 flex items-center gap-1.5 ${disabled ? "text-gray-300" : "text-gray-500"}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${disabled ? "bg-gray-300" : "bg-blue-500"}`}></span>
-            Black & White
+            A4 Black & White
           </label>
           <CustomSelect 
             value={config.bw} 
@@ -124,16 +124,46 @@ export default function HardwarePanel({ config, setConfig, printers, disabled })
           />
         </div>
 
+        {/* A3 B/W Section */}
+        <div>
+          <label className={`block text-[10px] font-bold uppercase mb-1.5 ml-1 flex items-center gap-1.5 ${disabled ? "text-gray-300" : "text-gray-500"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${disabled ? "bg-gray-300" : "bg-blue-500"}`}></span>
+            A3 Black & White
+          </label>
+          <CustomSelect 
+            value={config.bwA3} 
+            options={printers} 
+            onChange={(val) => setConfig({...config, bwA3: val})} 
+            colorClass="text-blue-600"
+            disabled={disabled}
+          />
+        </div>
+
         {/* Color Section */}
         <div>
           <label className={`block text-[10px] font-bold uppercase mb-1.5 ml-1 flex items-center gap-1.5 ${disabled ? "text-gray-300" : "text-gray-500"}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${disabled ? "bg-gray-300" : "bg-purple-500"}`}></span>
-            Color / Photo
+            A4 Color / Photo
           </label>
           <CustomSelect 
             value={config.color} 
             options={printers} 
             onChange={(val) => setConfig({...config, color: val})} 
+            colorClass="text-purple-600"
+            disabled={disabled}
+          />
+        </div>
+
+        {/* A3 Color Section */}
+        <div>
+          <label className={`block text-[10px] font-bold uppercase mb-1.5 ml-1 flex items-center gap-1.5 ${disabled ? "text-gray-300" : "text-gray-500"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${disabled ? "bg-gray-300" : "bg-purple-500"}`}></span>
+            A3 Color / Photo
+          </label>
+          <CustomSelect 
+            value={config.colorA3} 
+            options={printers} 
+            onChange={(val) => setConfig({...config, colorA3: val})} 
             colorClass="text-purple-600"
             disabled={disabled}
           />

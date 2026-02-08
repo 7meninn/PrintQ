@@ -37,7 +37,9 @@ export default function LoginPage() {
         id: Number(stationId), // Changed from shop_id to id based on your controller code
         password: password,
         has_bw: false,
-        has_color: false
+        has_color: false,
+        has_bw_a3: false,
+        has_color_a3: false
       };
 
       console.log("Sending Login Payload:", payload);

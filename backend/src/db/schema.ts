@@ -22,6 +22,8 @@ export const shops = pgTable("shops", {
   status: text("status").default('ACTIVE'),
   has_bw: boolean("has_bw").default(false),
   has_color: boolean("has_color").default(false),
+  has_bw_a3: boolean("has_bw_a3").default(false),
+  has_color_a3: boolean("has_color_a3").default(false),
   last_heartbeat: timestamp("last_heartbeat")
 });
 
@@ -58,6 +60,7 @@ export const order_files = pgTable("order_files", {
   pages: integer("pages").notNull(),
   copies: integer("copies").default(1),
   color: boolean("color").default(false),
+  paper_size: text("paper_size").default("A4"),
   cost: decimal("cost").notNull(),
   is_deleted_from_storage: boolean("is_deleted_from_storage").default(false).notNull(),
 }, (table) => [

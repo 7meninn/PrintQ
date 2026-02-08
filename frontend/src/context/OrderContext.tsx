@@ -5,6 +5,7 @@ export interface LocalFileItem {
   file: File;
   color: boolean;
   copies: number;
+  paper_size?: "A3" | "A4";
   detected_pages?: number;
   calculated_pages?: number;
   cost?: number;

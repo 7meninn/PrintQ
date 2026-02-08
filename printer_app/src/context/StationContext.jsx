@@ -8,13 +8,27 @@ export const useStation = () => useContext(StationContext);
 export function StationProvider({ children }) {
   const [station, setStation] = useState(null); 
   const [printers, setPrinters] = useState([]);
-  const [config, setConfig] = useState({ bw: "Not Available", color: "Not Available" });
+  const [config, setConfig] = useState({ 
+    bw: "Not Available", 
+    color: "Not Available",
+    bwA3: "Not Available",
+    colorA3: "Not Available"
+  });
   
   // 'idle' | 'active' | 'paused'
   const [serviceStatus, setServiceStatus] = useState("idle");
 
   // Refs to hold latest state for the interval (prevents closure staleness)
-  const stateRef = useRef({ station: null, config: { bw: "Not Available", color: "Not Available" }, status: "idle" });
+  const stateRef = useRef({ 
+    station: null, 
+    config: { 
+      bw: "Not Available", 
+      color: "Not Available",
+      bwA3: "Not Available",
+      colorA3: "Not Available"
+    }, 
+    status: "idle" 
+  });
 
   // Sync Refs whenever state changes
   useEffect(() => {
@@ -48,6 +62,8 @@ export function StationProvider({ children }) {
       // Calculate capabilities based on ACTIVE status + CONFIG
       const has_bw = isLive && config.bw !== "Not Available";
       const has_color = isLive && config.color !== "Not Available";
+      const has_bw_a3 = isLive && config.bwA3 !== "Not Available";
+      const has_color_a3 = isLive && config.colorA3 !== "Not Available";
 
       try {
         // Send heartbeat to server
@@ -57,7 +73,9 @@ export function StationProvider({ children }) {
           body: JSON.stringify({ 
             id: station.id, 
             has_bw, 
-            has_color 
+            has_color,
+            has_bw_a3,
+            has_color_a3
           })
         });
         // Uncomment to debug heartbeat logs in console
@@ -114,7 +132,13 @@ export function StationProvider({ children }) {
         fetch(`${API_BASE_URL}/shop/heartbeat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: station.id, has_bw: false, has_color: false })
+            body: JSON.stringify({ 
+              id: station.id, 
+              has_bw: false, 
+              has_color: false,
+              has_bw_a3: false,
+              has_color_a3: false
+            })
         }).catch(e => console.error(e));
     }
     setStation(null);

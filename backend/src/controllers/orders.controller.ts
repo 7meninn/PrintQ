@@ -3,6 +3,7 @@ import { db } from "../db/connection";
 import { orders, order_files, shops, users } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
+import { createSeparatorPdf } from "../services/separator.service";
 import { sendOrderPlacedEmail } from "../services/email.service";
 import { createRazorpayOrder, verifyPaymentSignature } from "../services/payment.service";
 import { uploadFileToAzure } from "../services/storage.service";
@@ -17,6 +18,7 @@ interface MulterFile {
 interface FileConfig {
   color: boolean;
   copies: number;
+  paper_size?: string;
 }
 
 export const prepareOrder = async (req: Request, res: Response) => {
@@ -25,6 +27,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
     const configStr = req.body.config;
     const shopId = Number(req.body.shop_id);
     const userId = Number(req.body.user_id);
+    const studentName = typeof req.body.student_name === "string" ? req.body.student_name : "";
 
     const configs: FileConfig[] = configStr ? JSON.parse(configStr) : [];
     
@@ -36,9 +39,43 @@ export const prepareOrder = async (req: Request, res: Response) => {
     const shop = await db.query.shops.findFirst({ where: eq(shops.id, shopId) });
     if (!shop) return res.status(404).json({ error: "Selected shop not found" });
 
+    const normalizedConfigs: FileConfig[] = files.map((_, i) => {
+      const conf = configs[i] || { color: false, copies: 1, paper_size: "A4" };
+      const paperSize = typeof conf.paper_size === "string" && conf.paper_size.toUpperCase() === "A3" ? "A3" : "A4";
+      const copies = Number(conf.copies) > 0 ? Number(conf.copies) : 1;
+      return { color: !!conf.color, copies, paper_size: paperSize };
+    });
+
+    const needsA3Color = normalizedConfigs.some(c => c.paper_size === "A3" && c.color);
+    const needsA3BW = normalizedConfigs.some(c => c.paper_size === "A3" && !c.color);
+    const needsA4Color = normalizedConfigs.some(c => c.paper_size === "A4" && c.color);
+    const needsA4BW = normalizedConfigs.some(c => c.paper_size === "A4" && !c.color);
+
+    const supportsA4Color = !!shop.has_color;
+    const supportsA4BW = !!shop.has_bw;
+    const supportsA3Color = !!shop.has_color_a3;
+    const supportsA3BW = !!shop.has_bw_a3;
+
+    if (needsA4Color && !supportsA4Color) {
+      return res.status(400).json({ error: "Selected shop does not support A4 color printing." });
+    }
+    if (needsA4BW && !supportsA4BW) {
+      return res.status(400).json({ error: "Selected shop does not support A4 B/W printing." });
+    }
+    if (needsA3Color && !supportsA3Color) {
+      return res.status(400).json({ error: "Selected shop does not support A3 color printing." });
+    }
+    if (needsA3BW && !supportsA3BW) {
+      return res.status(400).json({ error: "Selected shop does not support A3 B/W printing." });
+    }
+
     const BW_PRICE = 2;
     const COLOR_PRICE = 12;
     const SERVICE_CHARGE_PERCENTAGE = 0.04; // 4%
+    const hasA4Printer = !!shop.has_bw || !!shop.has_color;
+    const separatorPaperSize = "A4";
+    const separatorIsColor = false;
+    const separatorPrice = BW_PRICE;
 
     let summary = {
       total_bw_pages: 0,
@@ -54,7 +91,8 @@ export const prepareOrder = async (req: Request, res: Response) => {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      let conf = configs[i] || { color: false, copies: 1 };
+      const conf = normalizedConfigs[i];
+      const paperSize = conf.paper_size === "A3" ? "A3" : "A4";
       
       let detectedPages = 1;
       try {
@@ -86,8 +124,19 @@ export const prepareOrder = async (req: Request, res: Response) => {
         calculated_pages: calculatedPages,
         cost: fileCost,
         color: conf.color,
+        paper_size: paperSize,
         file_url: azureUrl 
       });
+    }
+
+    if (hasA4Printer) {
+      if (separatorIsColor) {
+        summary.total_color_pages += 1;
+        summary.color_cost += separatorPrice;
+      } else {
+        summary.total_bw_pages += 1;
+        summary.bw_cost += separatorPrice;
+      }
     }
 
     summary.print_cost = summary.bw_cost + summary.color_cost;
@@ -102,6 +151,26 @@ export const prepareOrder = async (req: Request, res: Response) => {
         status: "DRAFT",
     } as any).returning();
 
+    if (hasA4Printer) {
+      const separatorBuffer = await createSeparatorPdf({
+          orderId: draftOrder.id,
+          studentName: studentName || "Student",
+          paperSize: separatorPaperSize
+      });
+      const separatorFileName = `000_separator_order_${draftOrder.id}.pdf`;
+      const separatorUrl = await uploadFileToAzure(separatorBuffer, separatorFileName, separatorFileName);
+
+      await db.insert(order_files).values({
+          order_id: draftOrder.id,
+          file_url: separatorUrl,
+          file_type: "pdf",
+          pages: 1,
+          copies: 1,
+          color: separatorIsColor,
+          paper_size: separatorPaperSize,
+          cost: String(separatorPrice),
+      } as any);
+    }
 
     for (const f of processedFiles) {
         await db.insert(order_files).values({
@@ -111,14 +180,15 @@ export const prepareOrder = async (req: Request, res: Response) => {
             pages: f.detected_pages,
             copies: f.calculated_pages / f.detected_pages,
             color: f.color,
+            paper_size: f.paper_size,
             cost: String(f.cost),
         } as any);
     }
 
     res.json({ 
-        files: processedFiles, 
+        files: processedFiles,
         summary,
-        order_id: draftOrder.id 
+        order_id: draftOrder.id
     });
 
   } catch (err) {
@@ -129,7 +199,7 @@ export const prepareOrder = async (req: Request, res: Response) => {
 
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
-    const { order_id } = req.body; 
+    const { order_id, user_id } = req.body; 
 
     if (!order_id || isNaN(Number(order_id))) {
         return res.status(400).json({ error: "Invalid Order ID" });
@@ -140,6 +210,9 @@ export const initiatePayment = async (req: Request, res: Response) => {
     });
 
     if (!order) return res.status(404).json({ error: "Order not found" });
+    if (!user_id || Number(user_id) !== order.user_id) {
+        return res.status(403).json({ error: "Unauthorized payment request" });
+    }
 
 
     const amount = Number(order.total_amount);
@@ -166,12 +239,18 @@ export const initiatePayment = async (req: Request, res: Response) => {
 
 export const cancelOrder = async (req: Request, res: Response) => {
     try {
-        const { order_id } = req.body;
-        if (!order_id) return res.status(400).json({ error: "Order ID required" });
+    const { order_id, user_id } = req.body;
+    if (!order_id) return res.status(400).json({ error: "Order ID required" });
 
-        await db.update(orders)
-            .set({ status: "CANCELLED" })
-            .where(eq(orders.id, order_id));
+    const order = await db.query.orders.findFirst({ where: eq(orders.id, order_id) });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (!user_id || Number(user_id) !== order.user_id) {
+        return res.status(403).json({ error: "Unauthorized cancellation" });
+    }
+
+    await db.update(orders)
+        .set({ status: "CANCELLED" })
+        .where(eq(orders.id, order_id));
 
         console.log(`Order #${order_id} cancelled by user.`);
         res.json({ success: true });
@@ -185,6 +264,7 @@ export const confirmOrder = async (req: Request, res: Response) => {
   try {
     const { 
       order_id, 
+      user_id,
       razorpay_payment_id, 
       razorpay_signature 
     } = req.body;
@@ -192,6 +272,10 @@ export const confirmOrder = async (req: Request, res: Response) => {
     const order = await db.query.orders.findFirst({ where: eq(orders.id, order_id) });
     if (!order || !order.razorpay_order_id) {
         return res.status(400).json({ error: "Invalid order state" });
+    }
+
+    if (!user_id || Number(user_id) !== order.user_id) {
+        return res.status(403).json({ error: "Unauthorized order confirmation" });
     }
     
     // Security: Ensure order is in DRAFT state before confirming

@@ -17,12 +17,32 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
     if (printingFile) return;
     setPrintingFile(file.filename);
 
-    const printerName = file.color 
-      ? config.color 
-      : (config.bw !== 'Not Available' ? config.bw : config.color);
+    const rawPaperSize = typeof file.paper_size === "string" ? file.paper_size : "A4";
+    const paperSize = rawPaperSize.toUpperCase() === "A3" ? "A3" : "A4";
+    const isA3 = paperSize === "A3";
+
+    let printerName;
+    if (isA3) {
+      printerName = file.color
+        ? config.colorA3
+        : (config.bwA3 !== 'Not Available' ? config.bwA3 : config.colorA3);
+    } else {
+      printerName = file.color 
+        ? config.color 
+        : (config.bw !== 'Not Available' ? config.bw : config.color);
+    }
 
     if (printerName === 'Not Available') {
-      alert("Error: No suitable printer configured for this job type.");
+      alert(isA3
+        ? "Error: No suitable A3 printer configured for this job type."
+        : "Error: No suitable A4 printer configured for this job type."
+      );
+      setPrintingFile(null);
+      return;
+    }
+
+    if (isA3 && config.bwA3 === 'Not Available' && config.colorA3 === 'Not Available') {
+      alert("Error: A3 printers are not configured for this station.");
       setPrintingFile(null);
       return;
     }
@@ -31,7 +51,9 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
       await window.electronAPI.printJob({ 
         printerName, 
         filePath: file.url,
-        copies: 1
+        copies: 1,
+        color: file.color,
+        paperSize
       });
       setCopiesPrinted(prev => ({ 
         ...prev, 
@@ -83,12 +105,15 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
           {order.files.map((file, idx) => {
              const numPrinted = copiesPrinted[file.filename] || 0;
              const isComplete = numPrinted >= file.copies;
-             
+              
              const isPrintingThis = printingFile === file.filename;
              const nextInQueueIndex = order.files.findIndex(f => (copiesPrinted[f.filename] || 0) < f.copies);
              const isTurn = nextInQueueIndex === -1 || nextInQueueIndex === idx;
 
              const isDisabled = isAnyFilePrinting || (!isTurn && !isComplete);
+
+             const rawPaperSize = typeof file.paper_size === "string" ? file.paper_size : "A4";
+             const paperSize = rawPaperSize.toUpperCase() === "A3" ? "A3" : "A4";
 
              let buttonText;
              if (isPrintingThis) {
@@ -110,14 +135,17 @@ export default function ActiveJob({ order, config, onComplete, onFail }) {
                   </div>
                   <div className="flex-1 min-w-0">
                      <p className="font-bold text-gray-900 text-base truncate" title={file.filename}>{file.filename}</p>
-                     <div className="flex items-center gap-2 mt-1.5">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${file.color ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                           {file.color ? <Palette size={10} /> : <Printer size={10} />}
-                           {file.color ? "Color" : "B&W"}
-                        </span>
-                        <span className="text-xs text-gray-400 font-mono font-medium truncate">
-                           {file.copies} Copies • {file.pages} Pages
-                        </span>
+                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${file.color ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                          {file.color ? <Palette size={10} /> : <Printer size={10} />}
+                          {file.color ? "Color" : "B&W"}
+                       </span>
+                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${paperSize === "A3" ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                         {paperSize}
+                       </span>
+                       <span className="text-xs text-gray-400 font-mono font-medium truncate">
+                          {file.copies} Copies • {file.pages} Pages
+                       </span>
                         {file.copies > 1 && (
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-md border ${isComplete ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
                             {numPrinted} / {file.copies} Printed

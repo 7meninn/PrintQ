@@ -107,7 +107,7 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle("print-job", async (event, { printerName, filePath, copies = 1, color = false }) => {
+  ipcMain.handle("print-job", async (event, { printerName, filePath, copies = 1, color = false, paperSize = "A4" }) => {
     if (printerName === "Not Available") {
       throw new Error("Printer is not available or disabled.");
     }
@@ -135,9 +135,14 @@ app.whenReady().then(() => {
     }
 
     // 2. Construct SumatraPDF Arguments
+    const safePaperSize = typeof paperSize === "string" ? paperSize.toUpperCase() : "A4";
+    const allowedPaperSizes = new Set(["A3", "A4"]);
+    const normalizedPaperSize = allowedPaperSizes.has(safePaperSize) ? safePaperSize : "A4";
+
     const printSettings = [
       color ? "color" : "monochrome",
-      `${copies}x` // Add copies to print settings
+      `${copies}x`, // Add copies to print settings
+      `paper=${normalizedPaperSize}`
     ];
 
     const args = [
@@ -147,7 +152,7 @@ app.whenReady().then(() => {
       localFilePath
     ];
 
-    console.log(`[Main] Printing ${copies} copies to ${printerName} [${color ? 'Color' : 'B/W'}] with args: ${args.join(' ')}`);
+    console.log(`[Main] Printing ${copies} copies to ${printerName} [${color ? 'Color' : 'B/W'}] ${normalizedPaperSize} with args: ${args.join(' ')}`);
 
     // 3. Execute Print Command
     try {

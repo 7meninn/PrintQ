@@ -14,12 +14,19 @@ export const getShops = async (req: Request, res: Response) => {
         location: shops.location,
         has_bw: shops.has_bw,
         has_color: shops.has_color,
+        has_bw_a3: shops.has_bw_a3,
+        has_color_a3: shops.has_color_a3,
       })
       .from(shops)
       .where(
         and(
           eq(shops.status, 'ACTIVE'),
-          or(eq(shops.has_bw, true), eq(shops.has_color, true)),
+          or(
+            eq(shops.has_bw, true),
+            eq(shops.has_color, true),
+            eq(shops.has_bw_a3, true),
+            eq(shops.has_color_a3, true)
+          ),
           gt(shops.last_heartbeat, thirtySecondsAgo)
         )
       );

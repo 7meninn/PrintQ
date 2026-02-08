@@ -91,7 +91,12 @@ export default function DashboardPage() {
 
   // --- HANDLERS ---
   const handleStartService = () => {
-    if (config.bw === 'Not Available' && config.color === 'Not Available') {
+    if (
+      config.bw === 'Not Available' && 
+      config.color === 'Not Available' &&
+      config.bwA3 === 'Not Available' &&
+      config.colorA3 === 'Not Available'
+    ) {
       alert("Configuration Error: Select at least one active printer.");
       return;
     }
@@ -154,17 +159,25 @@ export default function DashboardPage() {
 
   let canOpenNext = true, blockReason = "";
   if (nextOrder) {
-    const hasColor = nextOrder.files.some(f => f.color);
-    const hasBW = nextOrder.files.some(f => !f.color);
-    if (hasColor && config.color === 'Not Available') {
-      canOpenNext = false; blockReason = "Job requires a Color printer.";
-    } else if (hasBW && config.bw === 'Not Available' && config.color === 'Not Available') {
-      canOpenNext = false; blockReason = "Job requires a B/W or Color printer.";
+    const needsA3Color = nextOrder.files.some(f => String(f.paper_size || "A4").toUpperCase() === "A3" && f.color);
+    const needsA3BW = nextOrder.files.some(f => String(f.paper_size || "A4").toUpperCase() === "A3" && !f.color);
+    const needsA4Color = nextOrder.files.some(f => String(f.paper_size || "A4").toUpperCase() !== "A3" && f.color);
+    const needsA4BW = nextOrder.files.some(f => String(f.paper_size || "A4").toUpperCase() !== "A3" && !f.color);
+
+    if (needsA3Color && config.colorA3 === 'Not Available') {
+      canOpenNext = false; blockReason = "Job requires an A3 Color printer.";
+    } else if (needsA3BW && config.bwA3 === 'Not Available' && config.colorA3 === 'Not Available') {
+      canOpenNext = false; blockReason = "Job requires an A3 B/W or Color printer.";
+    } else if (needsA4Color && config.color === 'Not Available') {
+      canOpenNext = false; blockReason = "Job requires an A4 Color printer.";
+    } else if (needsA4BW && config.bw === 'Not Available' && config.color === 'Not Available') {
+      canOpenNext = false; blockReason = "Job requires an A4 B/W or Color printer.";
     }
   }
   
   const nextColorPages = nextOrder?.files.filter(f => f.color).reduce((acc, f) => acc + (f.pages * f.copies), 0) || 0;
   const nextBwPages = nextOrder?.files.filter(f => !f.color).reduce((acc, f) => acc + (f.pages * f.copies), 0) || 0;
+  const nextA3Pages = nextOrder?.files.filter(f => String(f.paper_size || "A4").toUpperCase() === "A3").reduce((acc, f) => acc + (f.pages * f.copies), 0) || 0;
 
   const pauseMins = Math.floor(pauseTime / 60);
   const pauseSecs = Math.floor(pauseTime % 60);
@@ -254,10 +267,11 @@ export default function DashboardPage() {
                         <div><h3 className="text-lg font-bold text-gray-900 leading-none">#{nextOrder.order_id}</h3><p className="text-xs text-gray-500 mt-1 truncate max-w-[120px]">{nextOrder.user_name || "Guest"}</p></div>
                         <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs font-bold uppercase">Queued</span>
                      </div>
-                     <div className="grid grid-cols-2 gap-2 mb-6">
-                        <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100"><p className="text-[10px] text-gray-400 font-bold uppercase">B/W Pages</p><p className="text-xl font-mono font-bold text-gray-800">{nextBwPages}</p></div>
-                        <div className="bg-purple-50 rounded-lg p-2 text-center border border-purple-100"><p className="text-[10px] text-purple-400 font-bold uppercase">Color Pages</p><p className="text-xl font-mono font-bold text-purple-800">{nextColorPages}</p></div>
-                     </div>
+                      <div className="grid grid-cols-3 gap-2 mb-6">
+                         <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-100"><p className="text-[10px] text-gray-400 font-bold uppercase">B/W Pages</p><p className="text-xl font-mono font-bold text-gray-800">{nextBwPages}</p></div>
+                         <div className="bg-purple-50 rounded-lg p-2 text-center border border-purple-100"><p className="text-[10px] text-purple-400 font-bold uppercase">Color Pages</p><p className="text-xl font-mono font-bold text-purple-800">{nextColorPages}</p></div>
+                         <div className="bg-blue-50 rounded-lg p-2 text-center border border-blue-100"><p className="text-[10px] text-blue-400 font-bold uppercase">A3 Pages</p><p className="text-xl font-mono font-bold text-blue-800">{nextA3Pages}</p></div>
+                      </div>
                      {!canOpenNext && (<div className="bg-red-50 border border-red-100 rounded-lg p-3 mb-4 flex gap-2"><Ban className="text-red-500 shrink-0" size={16} /><p className="text-xs font-bold text-red-600 leading-tight">Locked: {blockReason}</p></div>)}
                      <div className="mt-auto space-y-2">
                         <button onClick={handleOpenOrder} disabled={activeJob !== null || !canOpenNext || serviceStatus !== 'active'} className={`w-full py-3 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 ${activeJob !== null || !canOpenNext || serviceStatus !== 'active' ? "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none" : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200"}`} >{activeJob ? "Finish Active Job" : "Open Order"} <ChevronRight size={16}/></button>
