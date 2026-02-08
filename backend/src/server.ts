@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import multer from "multer";
-import { startGhostStationJob } from "./cron/ghost_station";
 
 import { login, initiateSignup, completeSignup, forgotPassword, resetPassword } from "./controllers/auth.controller";
 import { getShops } from "./controllers/shops.controller";
@@ -122,7 +121,6 @@ app.post("/shop/fail", failJob);
 startCleanupJob();
 startRefundJob();
 startStationMonitorJob();
-startGhostStationJob();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -194,12 +194,12 @@ export const getAllShops = async (req: Request, res: Response) => {
         
         // 2. Add dynamic "online" status based on heartbeat
         const now = new Date().getTime();
-        const data = activeShops.map(s => {
-            const lastPing = s.last_heartbeat ? new Date(s.last_heartbeat).getTime() : 0;
-            // Online if pinged in last 60 seconds
-            const isOnline = (now - lastPing) < 60000; 
-            return { ...s, liveStatus: isOnline ? "ONLINE" : "OFFLINE" };
-        });
+    const data = activeShops.map(s => {
+      const lastPing = s.last_heartbeat ? new Date(s.last_heartbeat).getTime() : 0;
+      // Online if pinged in last 60 seconds
+      const isOnline = (now - lastPing) < 60000; 
+      return { ...s, liveStatus: isOnline ? "ONLINE" : "OFFLINE" };
+    });
 
         res.json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -361,7 +361,7 @@ export const markPayoutAsPaid = async (req: Request, res: Response) => {
 
 export const createShop = async (req: Request, res: Response) => {
   try {
-    const { name, location, password, upi_id } = req.body;
+    const { name, location, password, upi_id, has_bw_a3, has_color_a3 } = req.body;
 
     if (!name || !location || !password) {
       return res.status(400).json({ error: "Name, Location, and Password are required" });
@@ -373,7 +373,9 @@ export const createShop = async (req: Request, res: Response) => {
       password,
       upi_id: upi_id || null,
       has_bw: false,
-      has_color: false
+      has_color: false,
+      has_bw_a3: !!has_bw_a3,
+      has_color_a3: !!has_color_a3
     }).returning();
 
     console.log(`🆕 Shop Created: ${name} (ID: ${newShop.id})`);
