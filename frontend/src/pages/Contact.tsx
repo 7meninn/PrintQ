@@ -85,8 +85,8 @@ export default function Contact() {
                 <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Registered Business Details</h3>
                 <div className="text-center text-gray-600 space-y-2">
                     <p><span className="font-semibold">Merchant Legal Name:</span> AYUSH PATHANIA</p>
-                    <p><span className="font-semibold">Registered Address:</span> VPO SALOL DISTT KANGRA, Kangra, HIMACHAL PRADESH 176214</p>
-                    <p><span className="font-semibold">Telephone No:</span> 8278755136</p>
+                    <p><span className="font-semibold">Registered Address:</span> Greater Mohali, Punjab</p>
+                    <p><span className="font-semibold">Telephone No:</span> +91 Coming Soon</p>
                     <p><span className="font-semibold">E-Mail ID:</span> support@printq.app</p>
                 </div>
             </div>

@@ -48,7 +48,7 @@ export default function Terms() {
         <section className="space-y-4 text-gray-600 leading-relaxed">
             <h2 className="text-xl font-bold text-gray-900 mb-4">General Terms & Conditions</h2>
             <p>
-                For the purpose of these Terms and Conditions, the term "we", "us", "our" used anywhere on this page shall mean AYUSH PATHANIA, whose registered/operational office is VPO SALOL DISTT KANGRA Kangra HIMACHAL PRADESH 176214. "you", “your”, "user", “visitor” shall mean any natural or legal person who is visiting our website and/or agreed to purchase from us.
+                For the purpose of these Terms and Conditions, the term "we", "us", "our" used anywhere on this page shall mean AYUSH PATHANIA, whose registered/operational office is Greater Mohali, Punjab. "you", “your”, "user", “visitor” shall mean any natural or legal person who is visiting our website and/or agreed to purchase from us.
             </p>
             <p>
                 Your use of the website and/or purchase from us are governed by following Terms and Conditions:

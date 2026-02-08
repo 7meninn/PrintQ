@@ -34,6 +34,7 @@ interface ActiveOrder {
   file_count: number;
   has_color: boolean;
   total_amount: string;
+  created_at: string;
 }
 
 export default function UserHistoryPage() {
@@ -47,13 +48,13 @@ export default function UserHistoryPage() {
     return new Date(now.getTime() - offset).toISOString().split('T')[0];
   });
 
-  const [activeOrder, setActiveOrder] = useState<ActiveOrder | null>(null);
+  const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([]);
   const [history, setHistory] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Logic to control History Refresh
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const lastOrderIdRef = useRef<number | null>(null);
+  const lastOrderIdsRef = useRef<string | null>(null);
   
   const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,22 +72,22 @@ export default function UserHistoryPage() {
       try {
         const res = await fetch(`${API_BASE_URL}/user/active?user_id=${user.id}`);
         if (res.ok) {
-          const data: ActiveOrder | null = await res.json();
-          
-          setActiveOrder(prev => {
-             if (JSON.stringify(prev) !== JSON.stringify(data)) return data;
+          const data: ActiveOrder[] = await res.json();
+          const normalized = Array.isArray(data) ? data : [];
+
+          setActiveOrders(prev => {
+             if (JSON.stringify(prev) !== JSON.stringify(normalized)) return normalized;
              return prev;
           });
 
-          // Check if order finished to refresh history
-          const currentId = data ? data.id : null;
-          const lastId = lastOrderIdRef.current;
+          const currentIds = normalized.map(order => order.id).sort((a, b) => a - b).join(",");
+          const lastIds = lastOrderIdsRef.current;
 
-          if (lastId !== null && currentId !== lastId) {
+          if (lastIds !== null && currentIds !== lastIds) {
              setRefreshTrigger(prev => prev + 1);
           }
 
-          lastOrderIdRef.current = currentId;
+          lastOrderIdsRef.current = currentIds;
         }
       } catch (e) {
         console.error("Active order poll failed", e);
@@ -148,7 +149,7 @@ export default function UserHistoryPage() {
       <div className="max-w-3xl w-full mx-auto p-6 space-y-8">
         
         {/* --- ACTIVE ORDER SECTION --- */}
-        {activeOrder && (
+        {activeOrders.length > 0 && (
           <div className="animate-in slide-in-from-top-4 duration-500">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Zap size={14} className="text-yellow-500 fill-yellow-500"/> Live Status
@@ -159,39 +160,46 @@ export default function UserHistoryPage() {
                 <div className="h-full bg-blue-500 animate-pulse w-2/3 rounded-r-full"></div>
               </div>
 
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-2xl font-extrabold text-gray-900">Queue #{activeOrder.queue_position}</h3>
-                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                      <MapPin size={14}/> {activeOrder.shop_name}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border border-blue-100">
-                      {activeOrder.status}
-                    </span>
-                    <p className="text-xs text-gray-400 mt-2 font-mono">ID: {activeOrder.id}</p>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-100">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white rounded-xl text-blue-600 shadow-sm">
-                      <FileText size={24} />
+              <div className="p-6 space-y-4">
+                {activeOrders.map(activeOrder => (
+                  <div key={activeOrder.id} className="bg-white rounded-xl border border-gray-100 p-4">
+                    <div className="flex justify-between items-start mb-4 gap-3">
+                      <div>
+                        <h3 className="text-xl font-extrabold text-gray-900">Queue #{activeOrder.queue_position}</h3>
+                        <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                          <MapPin size={14}/> {activeOrder.shop_name}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {format(parseISO(activeOrder.created_at), "h:mm a")}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border border-blue-100">
+                          {activeOrder.status}
+                        </span>
+                        <p className="text-xs text-gray-400 mt-2 font-mono">ID: {activeOrder.id}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-gray-900">{activeOrder.file_count} Documents</p>
-                      <p className="text-xs text-gray-500">{activeOrder.has_color ? "Color Print" : "B/W Print"}</p>
+
+                    <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-100">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white rounded-xl text-blue-600 shadow-sm">
+                          <FileText size={24} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">{activeOrder.file_count} Documents</p>
+                          <p className="text-xs text-gray-500">{activeOrder.has_color ? "Color Print" : "B/W Print"}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400 font-bold uppercase">Total</p>
+                        <p className="text-xl font-bold text-gray-900">₹{activeOrder.total_amount}</p>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-400 font-bold uppercase">Total</p>
-                    <p className="text-xl font-bold text-gray-900">₹{activeOrder.total_amount}</p>
-                  </div>
-                </div>
+                ))}
 
-                <div className="mt-6 flex items-center gap-2 text-xs text-gray-400 justify-center">
+                <div className="mt-2 flex items-center gap-2 text-xs text-gray-400 justify-center">
                   <Loader2 size={12} className="animate-spin"/> 
                   Updating status automatically...
                 </div>

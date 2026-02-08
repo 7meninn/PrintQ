@@ -365,7 +365,7 @@ export const getUserActiveOrder = async (req: Request, res: Response) => {
     const userId = Number(req.query.user_id);
     if (!userId) return res.status(400).json({ error: "User ID required" });
 
-    const [activeOrder] = await db.select({
+    const activeOrders = await db.select({
         id: orders.id,
         status: orders.status,
         shop_id: orders.shop_id,
@@ -379,34 +379,44 @@ export const getUserActiveOrder = async (req: Request, res: Response) => {
         eq(orders.user_id, userId),
         inArray(orders.status, ["QUEUED", "PRINTING"])
       ))
-      .orderBy(desc(orders.created_at))
-      .limit(1);
+      .orderBy(desc(orders.created_at));
 
-    if (!activeOrder) return res.json(null);
+    if (activeOrders.length === 0) return res.json([]);
 
-    const [queueResult] = await db.select({ count: sql<number>`count(*)` })
+    const shopIds = Array.from(new Set(activeOrders.map(order => order.shop_id)));
+    const queueCounts = await db.select({
+        shop_id: orders.shop_id,
+        count: sql<number>`count(*)`
+      })
       .from(orders)
       .where(and(
-        eq(orders.shop_id, activeOrder.shop_id),
-        inArray(orders.status, ["QUEUED", "PRINTING"]),
-        lt(orders.id, activeOrder.id)
-      ));
+        inArray(orders.shop_id, shopIds),
+        inArray(orders.status, ["QUEUED", "PRINTING"])
+      ))
+      .groupBy(orders.shop_id);
 
+    const files = await db.select().from(order_files).where(inArray(order_files.order_id, activeOrders.map(o => o.id)));
 
-    const files = await db.select().from(order_files).where(eq(order_files.order_id, activeOrder.id));
-    const totalFiles = files.length;
-    const isColor = files.some(f => f.color);
-
-    res.json({
-      id: activeOrder.id,
-      status: activeOrder.status,
-      shop_name: activeOrder.shop_name,
-      queue_position: Number(queueResult.count) + 1,
-      file_count: totalFiles,
-      has_color: isColor,
-      total_amount: activeOrder.total_amount,
-      created_at: activeOrder.created_at
+    const result = activeOrders.map(order => {
+      const totalFiles = files.filter(f => f.order_id === order.id);
+      const isColor = totalFiles.some(f => f.color);
+      const shopActiveOrders = activeOrders
+        .filter(o => o.shop_id === order.shop_id)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      const queueIndex = shopActiveOrders.findIndex(o => o.id === order.id);
+      return {
+        id: order.id,
+        status: order.status,
+        shop_name: order.shop_name,
+        queue_position: queueIndex >= 0 ? queueIndex + 1 : 0,
+        file_count: totalFiles.length,
+        has_color: isColor,
+        total_amount: order.total_amount,
+        created_at: order.created_at
+      };
     });
+
+    res.json(result);
 
   } catch (err: any) {
     res.status(500).json({ error: err.message });
